@@ -1,0 +1,31 @@
+version: "3"
+
+services:
+    mongo:
+        image: mongo:latest
+        # ports:
+        #     - 27017:27017 # Expose this port to access mongodb externally
+        volumes:
+            - ./mongodb:/data/db
+        restart: on-failure
+
+    lavalink:
+        image: fredboat/lavalink:latest
+        # ports:
+        #     - 2333:2333 # Expose this port to access lavalink externally
+        volumes:
+            - type: bind
+              source: ./lavalink/application.yml
+              target: /opt/Lavalink/application.yml
+              read_only: true
+
+    bot:
+        build: ./src
+        env_file:
+            - .env
+        volumes:
+            - ./src:/usr/src/app
+        # restart: on-failure
+        depends_on:
+            - mongo
+            - lavalink
