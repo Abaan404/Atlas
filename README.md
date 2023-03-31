@@ -66,14 +66,18 @@ Before starting, keep in mind the bot is ran under a containerized instance, so 
    ```sh
    git clone https://github.com/Abaan404/Atlas
    ```
-2. create a `.env` file in the project root or supply the bot with the following environment variables
+2. Create a lavalink config (`./lavalink/application.yml`)
+   ```sh
+   https://github.com/freyacodes/Lavalink/blob/master/LavalinkServer/application.yml.example
+   ```
+3. create a `.env` file in the project root or supply the bot with the following environment variables
    ```sh
    BOT_TOKEN=
    LAVALINK_PASSWORD=
    SPOTIFY_CLIENT_ID=
    SPOTIFY_CLIENT_SECRET=
    ```
-5. And build the images
+4. Then build and deploy the images
    ```sh
    docker compose up -d
    ```
