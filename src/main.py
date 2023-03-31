@@ -9,6 +9,7 @@ from utils.functions import decay_send
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
+os.makedirs("logs", exist_ok=True)
 handler = logging.FileHandler(filename='./logs/bot.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s]: %(name)s  %(message)s'))
 logger.addHandler(handler)

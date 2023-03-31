@@ -19,12 +19,19 @@ class RadioCore(commands.Cog):
         bot.loop.create_task(self.connect_nodes())
 
     async def connect_nodes(self):
+        while True:
+            try:
+                await asyncio.sleep(2)
         await self.pomice.create_node(
             bot=self.bot, host='lavalink',
             port=2333, password=os.getenv("LAVALINK_PASSWORD"), identifier="MAIN",
             spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID"), spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
             apple_music=True
         )
+                break
+            except pomice.NodeConnectionFailure: # keep reconnecting until lavalink is ready
+                continue
+
         print(f'and pomice is ready!')
 
     async def play_song(self, player, playlist):
@@ -47,7 +54,7 @@ class RadioCore(commands.Cog):
                 ))
 
     @commands.Cog.listener()
-    async def on_pomice_track_end(self, player , track, _):
+    async def on_pomice_track_end(self, player, track, _):
         RadioDB(player.guild.id).update()
         playlist = RadioDB(player.guild.id).playlist(8)
         await self.play_song(player, playlist)
