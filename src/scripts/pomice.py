@@ -28,7 +28,7 @@ class AtlasNode(pomice.Node):
 
             return [
                 pomice.Track(
-                    track_id=track["track"],
+                    track_id=track["encoded"],
                     info={
                         "title": info.get("title"),
                         "author": info.get("author"),

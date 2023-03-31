@@ -22,12 +22,12 @@ class RadioCore(commands.Cog):
         while True:
             try:
                 await asyncio.sleep(2)
-        await self.pomice.create_node(
-            bot=self.bot, host='lavalink',
-            port=2333, password=os.getenv("LAVALINK_PASSWORD"), identifier="MAIN",
-            spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID"), spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-            apple_music=True
-        )
+                await self.pomice.create_node(
+                    bot=self.bot, host='lavalink',
+                    port=2333, password=os.getenv("LAVALINK_PASSWORD"), identifier="MAIN",
+                    spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID"), spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+                    apple_music=True
+                )
                 break
             except pomice.NodeConnectionFailure: # keep reconnecting until lavalink is ready
                 continue
@@ -207,33 +207,32 @@ class Radio(RadioCore):
                     case "twitch_track":
                         await ctx.send(embed = Embeds.default(
                             user=ctx.author,
-                            description=f"**Twitch Stream playback is currently disabled.\nSee [here](https://github.com/Walkyst/lavaplayer-fork/issues/76)**",
+                            description=f"**Added [{data.title}]({data.uri}) [∞] to the queue ({position})**",
                             colour = Colour.TWITCH
                         ))
-                        return
 
             elif isinstance(data, pomice.Playlist):
                 position = RadioDB(ctx.guild.id).push([{"url" : track.uri, "title" : track.title, "author": track.author, "user" : ctx.author.id, "length" : 0 if track.is_stream else track.length} for track in data.tracks])
                 match data.playlist_type.value:
-                    case "youtube_playlist":
+                    case "youtube":
                         await ctx.send(embed = Embeds.default(
                             user=ctx.author,
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
                             colour=Colour.YOUTUBE
                         ))
-                    case "soundcloud_playlist":
+                    case "soundcloud":
                         await ctx.send(embed = Embeds.default(
                             user=ctx.author,
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
                             colour = Colour.SOUNDCLOUD
                         ))
-                    case "spotify_playlist":
+                    case "spotify":
                         await ctx.send(embed = Embeds.default(
                             user=ctx.author,
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
                             colour=Colour.SPOTIFY
                         ))
-                    case "apple_music_playlist":
+                    case "apple_music":
                         await ctx.send(embed = Embeds.default(
                             user=ctx.author,
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
