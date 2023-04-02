@@ -23,6 +23,7 @@ def verify_channel(module):
         return True
     return commands.check(predicate)
 
+
 def has_permissions(role):
     def predicate(ctx):
         if not RoleDB(ctx.guild.id).permission_level(ctx.author) >= role.value:
@@ -41,6 +42,7 @@ def format_track_time(length):
         return f"{length//60000:02}:{(length//1000)%60:02}"
     else:
         return f"{length//3600000:02}:{(length//60000)%60:02}:{(length//1000)%60:02}"
+
 
 class Regex:
     def match_channel(text): return re.search("^<#(\d+)>$", text)

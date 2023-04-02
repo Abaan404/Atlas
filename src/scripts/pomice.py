@@ -49,9 +49,6 @@ class AtlasNode(pomice.Node):
         return await super().get_tracks(query, ctx=ctx, search_type=search_type, filters=filters)
 
 class AtlasNodePool(pomice.NodePool):
-    def __init__(self) -> None:
-        super().__init__()
-
     @classmethod
     async def create_node(cls, *, bot, host: str, port: str, password: str, identifier: str, secure: bool = False, heartbeat: int = 30, spotify_client_id = None, spotify_client_secret = None, session = None, apple_music: bool = False):
         if identifier in cls._nodes.keys():

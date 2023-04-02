@@ -90,11 +90,11 @@ class ModuleDB(MongoHelper):  # TODO
         return [module["name"] for module in self._get_object("modules")]
 
     def get_guilds_enabled(self, module) -> list:
-        return list(self.data.aggregate([
+        return self.data.aggregate([
             {"$unwind": "$modules"},
             {"$match": {"modules.name": module.value}},
             {"$project": {"_id": False, "guild": "$_id", "config": "$modules.config"}}
-        ]))
+        ])
 
 
 class BlameDB(MongoHelper):
