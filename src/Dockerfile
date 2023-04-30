@@ -1,8 +1,9 @@
 FROM python
 
 WORKDIR /usr/src/app
-COPY . .
 
+COPY ./requirements.txt ./requirements.txt 
 RUN pip install --default-timeout=100 --no-cache-dir -r requirements.txt
 
-ENTRYPOINT ["python3", "main.py"]
+COPY . .
+ENTRYPOINT ["python3", "-u", "main.py"]
