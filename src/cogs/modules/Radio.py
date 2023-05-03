@@ -1,16 +1,17 @@
-import discord, asyncio, pomice
+import asyncio
+import discord
 import os
-
+import pomice
+from discord import app_commands
 from discord.ext import commands
 
-from scripts.pomice import AtlasPlayer, AtlasNodePool
-from scripts.pagifier import Pagifier, PlayerMessage, VolumeMessage
-from scripts.embeds import Colour, Embeds
 from scripts.database import ModuleDB, RadioDB
+from scripts.message import AtlasMessage, AtlasPlayerControl, Colour
+from scripts.pomice import AtlasNodePool, AtlasPlayer
+from utils.enums import Module, Roles
 from utils.errors import DMBlocked, ModuleNotFound
-from utils.enums import Module
-from utils.functions import clamp, verify_channel, has_permissions, decay_send, stringify, format_track_time
-from utils.enums import Roles
+from utils.functions import clamp, has_permissions, verify_channel
+
 
 class RadioCore(commands.Cog):
     def __init__(self, bot) -> None:
@@ -23,35 +24,34 @@ class RadioCore(commands.Cog):
             try:
                 await asyncio.sleep(2)
                 await self.pomice.create_node(
-                    bot=self.bot, host='lavalink',
-                    port=2333, password=os.getenv("LAVALINK_PASSWORD"), identifier="MAIN",
-                    spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID"), spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-                    apple_music=True
+                    bot=self.bot,
+                    host="lavalink",
+                    port=2333,
+                    password=os.getenv("LAVALINK_PASSWORD"),
+                    identifier="MAIN",
+                    spotify_client_id=os.getenv("SPOTIFY_CLIENT_ID"),
+                    spotify_client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+                    apple_music=True,
                 )
                 break
-            except pomice.NodeConnectionFailure: # keep reconnecting until lavalink is ready
+            except pomice.NodeConnectionFailure:  # keep reconnecting until lavalink is ready
                 continue
-
-        print(f'and pomice is ready!')
+        print(f'Pomice is ready!')
 
     async def play_song(self, player, playlist):
-        if not player: # idk it stops working if i remove this
+        if not player:  # idk it stops working if i remove this
             return
         if not playlist:
             await player.destroy()
             return
-        self.bot.loop.create_task(PlayerMessage(player, playlist).update_player_message())
+        self.bot.loop.create_task(AtlasPlayerControl(player, playlist).update_player_controls())
         song = await player.get_tracks(query=playlist[0]["url"])
         await player.play(track=song[0])
 
     @commands.Cog.listener()
-    async def on_error(ctx, error):
+    async def on_error(self, interaction, error):
         if isinstance(error, (pomice.exceptions.SpotifyAlbumLoadFailed, pomice.exceptions.SpotifyPlaylistLoadFailed, pomice.exceptions.SpotifyTrackLoadFailed)):
-            await ctx.send(embed = Embeds.default(
-                    user=ctx.author,
-                    description=f"Could not find the song or playlist",
-                    colour=Colour.ERROR
-                ))
+            await AtlasMessage(interaction).send_error(description=f"Could not find the song or playlist")
 
     @commands.Cog.listener()
     async def on_pomice_track_end(self, player, track, _):
@@ -61,8 +61,6 @@ class RadioCore(commands.Cog):
 
     @commands.Cog.listener("on_voice_state_update")
     async def afk_check(self, member, before, after):
-        if not member.guild:
-            return
         player = self.pomice.get_node().get_player(member.guild.id)
         if player and len(self.bot.get_channel(player.channel.id).members) == 1:
             try:
@@ -82,441 +80,383 @@ class Radio(RadioCore):
             raise ModuleNotFound
         return True
 
-    async def is_player_ready(self, ctx):
-        if not ctx.voice_client:
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="The radio isn't currently active",
-                colour=Colour.ERROR
-            ))
+    @staticmethod
+    def format_track_time(length):
+        if length < 3600000:  # if less than 01:00:00 minutes
+            return f"{length//60000:02}:{(length//1000)%60:02}"
+        else:
+            return f"{length//3600000:02}:{(length//60000)%60:02}:{(length//1000)%60:02}"
+
+
+    @staticmethod
+    async def is_player_ready(interaction, player):
+        if not player:
+            await AtlasMessage(interaction).send_error(title="The radio isn't currently active")
             return False
-        elif not ctx.voice_client.is_playing:
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="The radio isn't currently playing anything",
-                colour=Colour.ERROR
-            ))
+        if not player.is_playing:
+            await AtlasMessage(interaction).send_error(title="The radio isn't currently playing anything")
             return False
         return True
 
-    async def is_user_connected(self, ctx):
-        if not ctx.author.voice:
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="You're not connected to the voice channel",
-                colour=Colour.ERROR
-            ))
-            return False
-        if ctx.voice_client and ctx.author.voice.channel != ctx.voice_client.channel:
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="You're not connected to the bot's channel",
-                colour=Colour.ERROR
-            ))
-            return False
-        return True
+    @staticmethod
+    async def is_user_connected(interaction, player):
+        if player and interaction.user.voice.channel == player.channel:
+            return True
+        await AtlasMessage(interaction).send_error(title="You're not connected to the bot's channel")
 
-    @commands.command(name="join", aliases=["start", "connect", "j"])
-    @commands.cooldown(rate=1, per=3, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="join")
+    @app_commands.checks.cooldown(rate=1, per=3)
+    @app_commands.guild_only()
     @verify_channel(Module.RADIO)
-    async def _join(self, ctx, channel: discord.VoiceChannel = None):
+    async def _join(self, interaction: discord.Interaction, channel: discord.VoiceChannel = None):
         """Joins a vc and start playing."""
-        if not await self.is_user_connected(ctx):
+        if not (channel if channel else interaction.user.voice):
+            await AtlasMessage(interaction).send_error(title="You're not connected to a voice channel")
             return
 
-        channel = ctx.author.voice.channel if not channel else channel
-
-        if not ctx.voice_client:
+        channel = channel if channel else interaction.user.voice.channel
+        player = interaction.guild.voice_client
+        if not player:
             player = await channel.connect(cls=AtlasPlayer)
-        elif ctx.voice_client.channel != channel:
-            await self._leave(ctx)
-            player = await channel.connect(cls=AtlasPlayer)
-        player.text_channel = ctx.channel
+        elif player.channel != channel:
+            # await player.destroy()
+            # await asyncio.sleep(1)
+            # player = await channel.connect(cls=AtlasPlayer)
+            await AtlasMessage(interaction).send_error(title="Already connected to a channel!")
+            return
+        player.text_channel = interaction.channel
 
-        if not (playlist := RadioDB(ctx.guild.id).playlist(8)):
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="The current playlist is empty",
-                colour=Colour.ERROR
-            ))
+        if not (playlist := RadioDB(interaction.guild.id).playlist(8)):
+            await AtlasMessage(interaction).send_error(title="The current playlist is empty")
             return
 
         await self.play_song(player, playlist)
-        await ctx.message.add_reaction("✅")
+        await AtlasMessage(interaction).send(title=f"Joined channel {channel.name}", colour=Colour.RADIO)
 
-    @commands.command(name="leave", aliases=["stop", "disconnect"])
-    @commands.cooldown(rate=1, per=3, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="leave")
+    @app_commands.checks.cooldown(rate=1, per=3)
+    @app_commands.guild_only()
     @verify_channel(Module.RADIO)
-    async def _leave(self, ctx):
+    async def _leave(self, interaction: discord.Interaction):
         """Disconnects from the voice channel."""
-        player = ctx.voice_client
+        player = interaction.guild.voice_client
         if player:
             await player.destroy()
-        await ctx.message.add_reaction("✅")
+        await AtlasMessage(interaction).send(title=f"Radio disconnected", colour=Colour.RADIO)
 
-    @commands.command(name="play", aliases=["add", "pl"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="play")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _play(self, ctx, *query):
+    async def _play(self, interaction: discord.Interaction, query: str = None):
         """Add a song into the playlist."""
-        player = ctx.voice_client
-        if not await self.is_user_connected(ctx):
+        if not interaction.user.voice:
+            await AtlasMessage(interaction).send_error(title="You're not connected to a voice channel")
             return
 
+        player = interaction.guild.voice_client
         if not player:
-            player = await ctx.author.voice.channel.connect(cls=AtlasPlayer)
-        elif player.channel != ctx.author.voice.channel:
-            await self._leave(ctx)
-            player = await ctx.author.voice.channel.connect(cls=AtlasPlayer)
-        player.text_channel = ctx.channel
+            player = await interaction.user.voice.channel.connect(cls=AtlasPlayer)
+        elif player.channel != interaction.user.voice.channel:
+            await player.destroy()
+            player = await interaction.user.voice.channel.connect(cls=AtlasPlayer)
+        player.text_channel = interaction.channel
 
         if query:
-            data = await player.get_tracks(stringify(query))
+            data = await player.get_tracks(query)
             if isinstance(data, list):
                 data = data[0]
-                position = RadioDB(ctx.guild.id).push([{"url" : data.uri, "title" : data.title, "author": data.author, "user" : ctx.author.id, "length" : 0 if data.is_stream else data.length}])
+                position = RadioDB(interaction.guild.id).push([{
+                    "url": data.uri,
+                    "title": data.title,
+                    "author": data.author,
+                    "length": 0 if data.is_stream else data.length,
+                    "user": interaction.user.id
+                }])
+
                 match data.track_type.value:
-                    case "youtube_track":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
-                            description=f"**Added [{data.title}]({data.uri}) [{'∞' if data.is_stream else format_track_time(data.length)}] to the queue ({position})**",
-                            colour = Colour.YOUTUBE
-                        ))
-                    case "soundcloud_track":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                    case "youtube":
+                        await AtlasMessage(interaction).send(
+                            description=f"**Added [{data.title}]({data.uri}) [{'∞' if data.is_stream else self.format_track_time(data.length)}] to the queue ({position})**",
+                            colour=Colour.YOUTUBE
+                        )
+                    case "soundcloud":
+                        await AtlasMessage(interaction).send(
                             description=f"**Added [{data.title}]({data.uri}) [{data.length}] to the queue ({position})**",
-                            colour = Colour.SOUNDCLOUD
-                        ))
-                    case "spotify_track":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                            colour=Colour.SOUNDCLOUD
+                        )
+                    case "spotify":
+                        await AtlasMessage(interaction).send(
                             description=f"**Added [{data.title}]({data.uri}) [{data.length}] to the queue ({position})**",
-                            colour = Colour.SPOTIFY
-                        ))
-                    case "apple_music_track":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                            colour=Colour.SPOTIFY
+                        )
+                    case "apple_music":
+                        await AtlasMessage(interaction).send(
                             description=f"**Added [{data.title}]({data.uri}) [{data.length}] to the queue ({position})**",
-                            colour = Colour.APPLE_MUSIC
-                        ))
-                    case "twitch_track":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                            colour=Colour.APPLE_MUSIC
+                        )
+                    case "twitch":
+                        await AtlasMessage(interaction).send(
                             description=f"**Added [{data.title}]({data.uri}) [∞] to the queue ({position})**",
-                            colour = Colour.TWITCH
-                        ))
+                            colour=Colour.TWITCH
+                        )
 
             elif isinstance(data, pomice.Playlist):
-                position = RadioDB(ctx.guild.id).push([{"url" : track.uri, "title" : track.title, "author": track.author, "user" : ctx.author.id, "length" : 0 if track.is_stream else track.length} for track in data.tracks])
+                position = RadioDB(interaction.guild.id).push([{
+                    "url": track.uri,
+                    "title": track.title,
+                    "author": track.author,
+                    "length": 0 if track.is_stream else track.length,
+                    "user": interaction.user.id,
+                } for track in data.tracks])
+
                 match data.playlist_type.value:
                     case "youtube":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                        await AtlasMessage(interaction).send(
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
                             colour=Colour.YOUTUBE
-                        ))
+                        )
                     case "soundcloud":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                        await AtlasMessage(interaction).send(
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
-                            colour = Colour.SOUNDCLOUD
-                        ))
+                            colour=Colour.SOUNDCLOUD
+                        )
                     case "spotify":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                        await AtlasMessage(interaction).send(
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
                             colour=Colour.SPOTIFY
-                        ))
+                        )
                     case "apple_music":
-                        await ctx.send(embed = Embeds.default(
-                            user=ctx.author,
+                        await AtlasMessage(interaction).send(
                             description=f"**Added {data.track_count} song(s) to the queue ({position - data.track_count})**",
                             colour=Colour.APPLE_MUSIC
-                        ))
+                        )
 
             else:
-                await ctx.send(embed = Embeds.default(
-                    user=ctx.author,
-                    description=f"Could not find the song or playlist **{stringify(query)}**",
-                    colour=Colour.ERROR
-                ))
+                await AtlasMessage(interaction).send_error(description=f"Could not find the song or playlist **{query}**")
                 return
 
-
-        if not (playlist := RadioDB(ctx.guild.id).playlist(8)):
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="The current playlist is empty",
-                colour=Colour.ERROR
-            ))
+        elif not (playlist := RadioDB(interaction.guild.id).playlist(1)):
+            await AtlasMessage(interaction).send_error(title="The current playlist is empty")
             return
-
-        if player.message: # if player controls already exists
-            await PlayerMessage(player, playlist).update_player_message()
         else:
-            await self.play_song(player, playlist) # entrypoint
+            await AtlasMessage(interaction).send(title=f"Now Playing: {playlist[0]['author']} | {playlist[0]['title']}", colour=Colour.RADIO)
 
-    @commands.command(name="remove", aliases=["delete"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+        playlist = RadioDB(interaction.guild.id).playlist(8)
+        if player.message:
+            await AtlasPlayerControl(player, playlist).update_player_controls()
+        else:
+            await self.play_song(player, playlist)
+
+    @app_commands.command(name="remove")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _remove(self, ctx, position: int):
+    async def _remove(self, interaction: discord.Interaction, position: int):
         """Removes a song from the playlist."""
-        player = ctx.voice_client
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
 
-        song = RadioDB(ctx.guild.id).remove(abs(position)-1)
+        song = RadioDB(interaction.guild.id).remove(abs(position)-1)
         if not song:
-            await decay_send(ctx, embed=Embeds.default(
-                user=ctx.author,
-                title="Invalid index",
-                colour=Colour.ERROR
-            ))
+            await AtlasMessage(interaction).send_error(title="Invalid index")
             return
+
         if player:
-            await PlayerMessage(player, RadioDB(ctx.guild.id).playlist(8)).update_player_message()
+            await AtlasPlayerControl(player, RadioDB(interaction.guild.id).playlist(8)).update_player_controls()
+        await AtlasMessage(interaction).send(title=f"Removed song {song['title']}", colour=Colour.RADIO)
 
-        await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            title=f"Removed song {song['title']}",
-            colour=Colour.RADIO
-        ))
-
-    @commands.command(name="jump", aliases=[])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="jump")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _jump(self, ctx, position: int):
+    async def _jump(self, interaction: discord.Interaction, position: int):
         """Jumps to a song from the playlist."""
-        player = ctx.voice_client
-        if not await self.is_player_ready(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_player_ready(interaction, player):
             return
-        if not await self.is_user_connected(ctx):
+        if not await self.is_user_connected(interaction, player):
             return
 
-        if position not in [0, 1]:
-            RadioDB(ctx.guild.id).jump(abs(position) - 2) # jump one track early to allow skip
+        if position > 1:
+            RadioDB(interaction.guild.id).jump(abs(position) - 2)
             await player.stop()
-        await ctx.message.add_reaction("✅")
+        song = RadioDB(interaction.guild.id).playlist(1)[0]
+        await AtlasMessage(interaction).send(title=f"Now Playing: {song['author']} | {song['title']}", colour=Colour.RADIO)
 
-    @commands.command(name="move", aliases=["swap"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="move")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _move(self, ctx, index1: int, index2: int):
+    async def _move(self, interaction: discord.Interaction, index1: int, index2: int):
         """Moves tracks in the playlist."""
-        player = ctx.voice_client
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
 
-        if index1 in [0, 1] or index2 in [0, 1]:
-            await ctx.send(embed=Embeds.default(
-                user=ctx.author,
-                title=f"Cannot move currently playing track", # not really, im just lazy
-                colour=Colour.ERROR
-            ))
+        if index1 in {0, 1} or index2 in {0, 1}:
+            await AtlasMessage(interaction).send_error(title=f"Cannot move currently playing track")
 
-        RadioDB(ctx.guild.id).swap(index1 - 1, index2 - 1)
+        RadioDB(interaction.guild.id).swap(index1 - 1, index2 - 1)
         if player:
-            await PlayerMessage(player, RadioDB(ctx.guild.id).playlist(8)).update_player_message()
-        await ctx.message.add_reaction("✅")
+            await AtlasPlayerControl(player, RadioDB(interaction.guild.id).playlist(8)).update_player_controls()
+        await AtlasMessage(interaction).send(title=f"Moved song ({index1} -> {index2})", colour=Colour.RADIO)
 
-    @commands.command(name="clear", aliases=["cl"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="clear")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _clear(self, ctx):
+    async def _clear(self, interaction: discord.Interaction):
         """Clears the current playlist."""
-        if not await self.is_user_connected(ctx):
-            return
+        player = interaction.guild.voice_client
+        RadioDB(interaction.guild.id).clear()
 
-        player = ctx.voice_client
-        RadioDB(ctx.guild.id).clear()
         if player:
             await player.stop()
-        await ctx.message.add_reaction("✅")
+        await AtlasMessage(interaction).send(title=f"Cleared Queue!", colour=Colour.RADIO)
 
-    @commands.command(name="pause", aliases=["p"])
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="pause")
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _pause(self, ctx):
+    async def _pause(self, interaction: discord.Interaction):
         """Pauses the player."""
-        player = ctx.voice_client
-        if not await self.is_player_ready(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_player_ready(interaction, player):
             return
-        if not await self.is_user_connected(ctx):
+        if not await self.is_user_connected(interaction, player):
             return
 
         await player.set_pause(not player.is_paused)
-        await ctx.message.add_reaction("✅")
+        await AtlasMessage(interaction).send(title="Now Paused!" if player.is_paused else "Now Playing!", colour=Colour.RADIO)
 
-    @commands.command(name="loop", aliases=["repeat"])
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="loop")
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _loop(self, ctx, type=None):
+    async def _loop(self, interaction: discord.Interaction, type: str = ""):
         """Loop the playlist."""
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
 
         # probably a better way to do this whole command
         match type.lower():
             case "playlist":
-                RadioDB(ctx.guild.id).set_loop("playlist_repeat")
+                RadioDB(interaction.guild.id).set_loop("playlist_repeat")
             case "track":
-                RadioDB(ctx.guild.id).set_loop("track_repeat")
+                RadioDB(interaction.guild.id).set_loop("track_repeat")
             case "none" | "stop" | "disable":
-                RadioDB(ctx.guild.id).set_loop("no_repeat")
+                RadioDB(interaction.guild.id).set_loop("no_repeat")
             case _:
-                RadioDB(ctx.guild.id).cycle_loop()
+                RadioDB(interaction.guild.id).cycle_loop()
 
-        match RadioDB(ctx.guild.id).get_loop():
+        match RadioDB(interaction.guild.id).get_loop():
             case "playlist_repeat":
-                await ctx.send(embed=Embeds.default(
-                    user=ctx.author,
-                    title="Now Looping Playlist",
-                    colour=Colour.RADIO
-                ))
+                await AtlasMessage(interaction).send(title="Now Looping Playlist", colour=Colour.RADIO)
             case "track_repeat":
-                await ctx.send(embed=Embeds.default(
-                    user=ctx.author,
-                    title="Now Looping Track",
-                    colour=Colour.RADIO
-                ))
+                await AtlasMessage(interaction).send(title="Now Looping Track", colour=Colour.RADIO)
             case "no_repeat":
-                await ctx.send(embed=Embeds.default(
-                    user=ctx.author,
-                    title="No Longer Looping",
-                    colour=Colour.RADIO
-                ))
+                await AtlasMessage(interaction).send(title="No Longer Looping", colour=Colour.RADIO)
 
-    @commands.command(name="shuffle")
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="shuffle")
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _shuffle(self, ctx):
+    async def _shuffle(self, interaction: discord.Interaction):
         """Shuffles the playlist."""
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
 
-        RadioDB(ctx.guild.id).shuffle()
-        await ctx.message.add_reaction("✅")
+        RadioDB(interaction.guild.id).shuffle()
+        if player:
+            await player.stop()
+        await AtlasMessage(interaction).send(title="Playlist Shuffled!", colour=Colour.RADIO)
 
-    @commands.command(name="queue", aliases=["q"])
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="queue")
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.guild_only()
     @verify_channel(Module.RADIO)
-    async def _queue(self, ctx):
+    async def _queue(self, interaction: discord.Interaction):
         """Show the current playlist queue."""
-        playlist = RadioDB(ctx.guild.id).playlist()
+        length, playlist = RadioDB(interaction.guild.id).playlist()
+        playlist_length = RadioDB(interaction.guild.id).playlist_length()
 
-        total_length = 0
-        for i in range(len(playlist)):
-            total_length += playlist[i]['length']
-            playlist[i] = (
-                f"{i+1}) {playlist[i]['author']} | {playlist[i]['title']} [{format_track_time(playlist[i]['length']) if playlist[i]['length'] else '∞'}]\n{playlist[i]['url']}",
-                f"by <@{playlist[i]['user']}>"
-            )
+        def playlist_formatted():
+            for i, track in enumerate(playlist, start=1):
+                yield (
+                    f"{i}) {track['author']} | {track['title']} [{self.format_track_time(track['length']) if track['length'] else '∞'}]\n{track['url']}",
+                    f"by <@{track['user']}>"
+                )
 
-        msg = await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            title=f"Radio Queue for {ctx.guild.name}",
-            description=f"**Queue Length: {format_track_time(total_length)}**",
-            colour=Colour.RADIO
-        ))
-        pages = Pagifier(playlist, self.bot, ctx.author, msg)
-        await pages.generate_page_controls()
+        await AtlasMessage(interaction).send_page(
+            title=f"Radio Queue for {interaction.guild.name}",
+            description=f"**Queue Length: {self.format_track_time(playlist_length)}**",
+            colour=Colour.RADIO,
+            length=length, data=playlist_formatted()
+        )
 
-    @commands.command(name="volume", aliases=["vol"])
-    @commands.cooldown(rate=1, per=3, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="volume")
+    @app_commands.checks.cooldown(rate=1, per=3)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _volume(self, ctx, volume: int = None):
+    async def _volume(self, interaction: discord.Interaction, volume: int = None):
         """Sets the volume of the player."""
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
-        if not await self.is_player_ready(ctx):
+        if not await self.is_player_ready(interaction, player):
             return
 
-        player = ctx.voice_client
+        player = interaction.guild.voice_client
         if volume:
             await player.set_volume(clamp(volume, 0, 100))
-            await ctx.message.add_reaction("✅")
+            await AtlasMessage(interaction).send(title=f"Set volume to {player.volume}!", colour=Colour.RADIO)
         else:
-            await VolumeMessage(player).create_volume_controls()
+            await AtlasMessage(interaction).send_radio_volume_control()
 
-    @commands.command(name="skip", aliases=["next", "s"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="skip")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @has_permissions(Roles.RADIO)
     @verify_channel(Module.RADIO)
-    async def _skip(self, ctx):
+    async def _skip(self, interaction: discord.Interaction):
         """Skip a song."""
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
-        if not await self.is_player_ready(ctx):
+        if not await self.is_player_ready(interaction, player):
             return
 
-        player = ctx.voice_client
+        player = interaction.guild.voice_client
         await player.stop()
-        await ctx.message.add_reaction("✅")
+        await AtlasMessage(interaction).send(title="Skipped!", colour=Colour.RADIO)
 
-    @commands.command(name="voteskip", aliases=["vskip", "vs"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.member)
-    @commands.guild_only()
+    @app_commands.command(name="voteskip")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    @app_commands.guild_only()
     @verify_channel(Module.RADIO)
-    async def _voteskip(self, ctx):
+    async def _voteskip(self, interaction: discord.Interaction):
         """Vote to skip a song."""
-        if not await self.is_user_connected(ctx):
+        player = interaction.guild.voice_client
+        if not await self.is_user_connected(interaction, player):
             return
-        if not await self.is_player_ready(ctx):
-            return
-
-        player = ctx.voice_client
-        if len(ctx.author.voice.channel.members) == 2:
-            await player.stop()
-            await ctx.message.add_reaction("✅")
+        if not await self.is_player_ready(interaction, player):
             return
 
-        msg = await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            title="Vote to skip! (50% skip votes needed)",
-            colour=Colour.RADIO
-        ))
-        await msg.add_reaction("⏭️")
-        while True:
-            try:
-                await self.bot.wait_for("reaction_add", timeout=60, check=lambda reaction, user: user.guild == ctx.author.guild and str(reaction.emoji) == "⏭️" and reaction.message == msg)
-                if not player.is_playing:
-                    await ctx.message.add_reaction("❌")
-                    break
-            except asyncio.TimeoutError:
-                await ctx.message.add_reaction("❌")
-                break
-            users_voice = ctx.author.voice.channel.members
-            users_reacted = [user async for user in (await ctx.channel.fetch_message(msg.id)).reactions[0].users()] # :D
-            users_skipped = len([user for user in users_reacted if user in users_voice and user != self.bot.user])
-            if (len(users_voice) - 1)/2 <= users_skipped:
-                await player.stop()
-                await msg.edit(embed=Embeds.default(ctx.author, title="Skipped!", colour=Colour.RADIO))
-                await ctx.message.add_reaction("✅")
-                break
-        await msg.delete(delay=5)
+        await AtlasMessage(interaction).send_radio_voteskip()
+
 
 async def setup(bot):
     await bot.add_cog(Radio(bot))

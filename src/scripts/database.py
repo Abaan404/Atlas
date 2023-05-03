@@ -23,12 +23,21 @@ class MongoDB:
 
 
 class MongoHelper:
-    def _new_guild(self, schema: dict = {}) -> None:
+    def __init__(self, guild: int, collection: str, schema: dict = {}) -> None:
+        self.mongo = MongoDB.get_instance()
+        self.data = self.mongo.collection(collection)
+        self.guild = guild
+        self._new_guild(schema)
+
+    def _new_guild(self, schema) -> None:
         schema.update({"_id": self.guild})
         try:
             self.data.insert_one(schema)
         except pymongo.errors.DuplicateKeyError:
             pass
+
+    def _exists(self, object: str):
+        return bool(self.data.find_one({"_id": self.guild, object: {"$exists": True}}))
 
     def _get_object(self, key, filter: dict = {}) -> list:
         if data := self.data.find_one({"_id": self.guild}, filter).get(key):
@@ -46,6 +55,7 @@ class MongoHelper:
         ]))[0].get("array")
 
     def _remove_array_element_by_index(self, array: str, index) -> Union[dict, None]:
+        index = abs(index)
         if (val := self._get_array_element_by_index(array, index)):
             # https://jira.mongodb.org/browse/SERVER-1014 :D
             self.data.update_one({"_id": self.guild}, [
@@ -53,17 +63,21 @@ class MongoHelper:
             ])
         return val
 
+    def _get_array_length(self, array: str) -> int:
+        if not self._exists(array):
+            return 0
+        return list(self.data.aggregate([
+            {"$match": {"_id": self.guild}},
+            {"$project": {"length": {"$size": f"${array}"}}}
+        ]))[0].get("length")
+
     def _push(self, data: dict) -> None:
         self.data.update_one({"_id": self.guild}, {"$push": data})
 
 
 class ModuleDB(MongoHelper):  # TODO
-    def __init__(self, guild):
-        self.mongo = MongoDB.get_instance()
-        self.data = self.mongo.collection("modules")
-        self.guild = guild
-
-        self._new_guild({"modules": []})
+    def __init__(self, guild: int) -> None:
+        super().__init__(guild, collection="modules", schema={"modules": []})
 
     def enable(self, module, config={}) -> None:
         if not self.data.find_one({"_id": self.guild, "modules.name": module.value}):
@@ -79,12 +93,12 @@ class ModuleDB(MongoHelper):  # TODO
             return False
         return True
 
-    def get_config(self, module) -> Union[None, dict]:
+    def get_config(self, module, data) -> Union[None, dict]:
         return list(self.data.aggregate([
             {"$unwind": "$modules"},
             {"$match": {"_id": self.guild, "modules.name": module.value}},
             {"$project": {"_id": False, "config": "$modules.config"}}
-        ]))[0]["config"]
+        ]))[0]["config"].get(data)
 
     def fetch_enabled_name(self) -> list:
         return [module["name"] for module in self._get_object("modules")]
@@ -98,66 +112,69 @@ class ModuleDB(MongoHelper):  # TODO
 
 
 class BlameDB(MongoHelper):
-    def __init__(self, guild):
-        self.mongo = MongoDB.get_instance()
-        self.data = self.mongo.collection("blame")
-        self.guild = guild
-        self._new_guild()
+    def __init__(self, guild: int) -> None:
+        super().__init__(guild, collection="blame", schema={"modules": []})
 
-    def push(self, user, blamer, reason=None) -> None:
+    def push(self, user, blamer, reason) -> None:
         self._push({f"n{user}": {"blamer": blamer, "reason": reason}})
 
-    def list(self, user) -> list:
-        blames = self._get_object(f"n{user}")
-        # Filter out blames with null reason
-        return [blame.values() for blame in blames if blame["reason"]]
+    def list(self, user) -> tuple[int, list]:
+        if not self.data.find_one({"_id": self.guild}):
+            return 
+        blames = list(self.data.aggregate([
+            {"$match": {"_id": self.guild}},
+            {"$project": {"blames": {"$filter": {"input": f"$n{user}", "as": "buffer", "cond": {"$ne": ["$$buffer.reason", None]}}}}}
+        ]))[0].get("blames")
+        length = list(self.data.aggregate([
+            {"$match": {"_id": self.guild}},
+            {"$project": {"length": {"$size": {"$filter": {"input": f"$n{user}", "as": "buffer", "cond": {"$ne": ["$$buffer.reason", None]}}}}}}
+        ]))[0].get("length")
+        return length, blames
 
     def count(self, user) -> int:
-        return len(self._get_object(f"n{user}"))
+        return self._get_array_length(f"n{user}")
+
 
 class QotdDB(MongoHelper):
-    def __init__(self, guild):
-        self.mongo = MongoDB.get_instance()
-        self.data = self.mongo.collection("qotd")
-        self.guild = guild
-        self._new_guild({"pending": [], "accepted": []})
+    def __init__(self, guild: int) -> None:
+        super().__init__(guild, collection="qotd", schema={"pending": [], "accepted": []})
 
     def suggest(self, question, user) -> None:
-        self._push(
-            {"pending": {"$each": [{"question": f"{question}", "user": user}]}})
+        self._push({"pending": {"$each": [{"question": f"{question}", "user": user}]}})
 
     def decline(self, index) -> Union[None, str]:
-        self._remove_array_element_by_index("pending", index)
+        return self._remove_array_element_by_index("pending", index)
 
     def accept(self, index) -> Union[None, str]:
-        if question := self._get_array_element_by_index("pending", index):
-            self._remove_array_element_by_index("pending", index)
+        if question := self._remove_array_element_by_index("pending", index):
             self._push({"accepted": question})
-            return question
+        return question
 
     def fetch(self) -> Union[None, str]:
-        if question := self._get_array_element_by_index("accepted", 0):
-            self._remove_array_element_by_index("accepted", 0)
+        if question := self._remove_array_element_by_index("accepted", 0):
             return question
 
-    def get_pending(self) -> list:
-        return self._get_object("pending")
+    def get_pending(self) -> tuple[int, list]:
+        return self._get_array_length("pending"), self._get_object("pending")
 
-    def get_accepted(self) -> list:
-        return self._get_object("accepted")
+    def get_accepted(self) -> tuple[int, list]:
+        return self._get_array_length("accepted"), self._get_object("accepted")
 
 
 class RadioDB(MongoHelper):
-    def __init__(self, guild):
-        self.mongo = MongoDB.get_instance()
-        self.data = self.mongo.collection("radio")
-        self.guild = guild
-        self._new_guild({"loop": "playlist_repeat", "playlist": []})
+    def __init__(self, guild: int) -> None:
+        super().__init__(guild, collection="radio", schema={"loop": "playlist_repeat", "playlist": []})
 
-    def playlist(self, limit: int = None) -> list:
+    def playlist(self, limit: int = None) -> tuple[int, list] | list:
         if limit:
             return self._get_object("playlist", filter={"playlist": {"$slice": limit}})
-        return self._get_object("playlist")
+        return self._get_array_length("playlist"), self._get_object("playlist")
+
+    def playlist_length(self):
+        return list(self.data.aggregate([
+            {"$match": {"_id": self.guild}},
+            {"$project": {"length": {"$sum": "$playlist.length"}}}
+        ]))[0].get("length")
 
     def push(self, tracks: list[dict]) -> dict:
         self._push({"playlist": {"$each": tracks}})
@@ -203,7 +220,7 @@ class RadioDB(MongoHelper):
         return self._get_object("loop")
 
     def set_loop(self, loop_type: str) -> bool:
-        self._set_object({"loop", loop_type})
+        self._set_object({"loop": loop_type})
 
     def cycle_loop(self) -> bool:
         loops = ["playlist_repeat", "track_repeat",
@@ -213,41 +230,35 @@ class RadioDB(MongoHelper):
         return loop
 
     def shuffle(self) -> None:
-        playlist = self.playlist()
-        self._set_object({"playlist": random.shuffle(playlist)})
+        playlist = list(self.playlist()[1])
+        random.shuffle(playlist)
+        self._set_object({"playlist": playlist})
 
 
 class RoleDB(MongoHelper):
-    def __init__(self, guild):
-        self.mongo = MongoDB.get_instance()
-        self.data = self.mongo.collection("roles")
-        self.guild = guild
-        self._new_guild()
+    def __init__(self, guild: int) -> None:
+        super().__init__(guild, collection="roles")
 
     def insert(self, id, role) -> None:
         self._set_object({role: id})
 
     def remove(self, role) -> int:
-        id = self.get(role, mention=False)
+        id = self.get(role)
         self.data.update_one({"_id": self.guild}, {"$unset": {role: True}})
         return id
 
-    def get(self, role, mention=True) -> Union[str, int]:
+    def get(self, role) -> int:
         if not (role := self._get_object(role)):
             role = 0
-        if mention:
-            return f'<@&{role}>'
         return role
 
     def permission_level(self, member) -> int: #TODO test
         if member.guild_permissions.administrator:
             return Roles.ADMINISTRATOR.value
 
-        guild_roles = self.data.find_one(
-            {"_id": self.guild}, {"_id": False}).items()
+        guild_roles = self.data.find_one({"_id": self.guild}, {"_id": False}).items()
         user_roles = [role.id for role in member.roles]
-        user_levels = [
-            Roles[role[0]].value for role in guild_roles if role[1] in user_roles]
+        user_levels = [Roles[role[0]].value for role in guild_roles if role[1] in user_roles]
         if user_levels:
             return max(user_levels)
         else:

@@ -1,12 +1,11 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 
-from scripts.pagifier import Pagifier
-from scripts.embeds import Embeds
+from scripts.message import AtlasMessage
 from scripts.database import ModuleDB, BlameDB
 from utils.enums import Module
 from utils.errors import ModuleNotFound, DMBlocked
-from utils.functions import stringify
 
 
 class Blame(commands.Cog):
@@ -22,63 +21,44 @@ class Blame(commands.Cog):
             raise ModuleNotFound
         return True
 
-    @commands.command(name="blame")
-    @commands.guild_only()
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.guild)
-    async def _blame(self, ctx, blamed: discord.User, *reason):
+    @app_commands.command(name="blame")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    async def _blame(self, interaction: discord.Interaction, blamed: discord.Member, reason: str = None):
         """Add a blame to any user of choice!"""
-        blame = BlameDB(ctx.guild.id)
+        blame = BlameDB(interaction.guild.id)
+        blame.push(blamed.id, interaction.user.id, reason)
 
-        if reason := stringify(reason):
-            blame.push(blamed.id, ctx.author.id, reason)
-            embed = Embeds.default(
-                user=ctx.author,
-                description=f"{blamed.mention} has been blamed for **{reason}**"
-            )
+        if reason:
+            await AtlasMessage(interaction).send(description=f"{blamed.mention} has been blamed for **{reason}**")
         else:
-            blame.push(blamed.id, ctx.author.id)
-            embed = Embeds.default(
-                user=ctx.author,
-                description=f"{blamed.mention} has been blamed **{blame.count(blamed.id)}** time(s)!"
-            )
+            await AtlasMessage(interaction).send(description=f"{blamed.mention} has been blamed **{blame.count(blamed.id)}** time(s)!")
 
-        await ctx.send(embed=embed)
-
-    @commands.command(name="blamelist")
-    @commands.guild_only()
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.guild)
-    async def _blamelist(self, ctx, blamed: discord.Member = None):
+    @app_commands.command(name="blamelist")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    async def _blamelist(self, interaction: discord.Interaction, blamed: discord.Member = None):
         """List out all the blames for a user."""
-        if blamed is None:
-            blamed = ctx.message.author
-        blame = BlameDB(ctx.guild.id)
+        blamed = blamed if blamed else interaction.user
+        blame = BlameDB(interaction.guild.id)
+        length, data = blame.list(blamed.id)
 
-        data = blame.list(blamed.id)
-        for i, (user, text) in enumerate(data):
-            data[i] = (f"{i+1}) {text}", f"by <@{user}>")
+        date_formatted = ((f"{i}) {blames['reason']}", f"by <@{blames['blamer']}>") for i, blames in enumerate(data, start=1))
+        await AtlasMessage(interaction).send_page(
+            title=f'{blamed.name} has been blamed for...',
+            description=f'\nTotal blames: **{blame.count(blamed.id)}**',
+            length=length, data=date_formatted
+        )
 
-        msg = await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            title=f'Fetching all blames for user {blamed.name}',
-            description=f'\nTotal blames: **{blame.count(blamed.id)}**'
-        ))
-
-        pages = Pagifier(bot=self.bot, user=ctx.author, msg=msg, data=data)
-        await pages.generate_page_controls()
-
-    @commands.command(name="blamecount")
-    @commands.guild_only()
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.guild)
-    async def _blamecount(self, ctx, blamed: discord.Member = None):
+    @app_commands.command(name="blamecount")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    async def _blamecount(self, interaction: discord.Interaction, blamed: discord.Member = None):
         """Count the total number of blames on a user."""
-        if blamed is None:
-            blamed = ctx.message.author
-        blame = BlameDB(ctx.guild.id)
+        blamed = blamed if blamed else interaction.user
+        blame = BlameDB(interaction.guild.id)
 
-        await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            description=f'User {blamed.mention} has been blamed **{blame.count(blamed.id)}** time(s)!'
-        ))
+        await AtlasMessage(interaction).send(description=f'User {blamed.mention} has been blamed **{blame.count(blamed.id)}** time(s)!')
 
 
 async def setup(bot):

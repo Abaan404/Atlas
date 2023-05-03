@@ -1,7 +1,7 @@
 import discord, datetime, asyncio
 from discord.ext import commands, tasks
 
-from scripts.embeds import Colour
+from scripts.message import Colour
 from scripts.database import ModuleDB, QotdDB, RoleDB
 from utils.enums import Module
 

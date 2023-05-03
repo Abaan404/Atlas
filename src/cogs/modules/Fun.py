@@ -2,9 +2,10 @@ import math
 import os
 import random
 import discord
+from discord import app_commands
 from discord.ext import commands
 
-from scripts.embeds import Embeds, Colour
+from scripts.message import AtlasMessage
 from scripts.database import ModuleDB
 from utils.enums import Module
 from utils.errors import DMBlocked, ModuleNotFound
@@ -29,92 +30,85 @@ class Fun(commands.Cog):
             raise ModuleNotFound
         return True
 
-    @commands.command(name="cat")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _cat(self, ctx):
+    @app_commands.command(name="cat")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _cat(self, interaction: discord.Interaction):
         """Sends an image of a cat."""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title="Cats!").set_image(url="attachment://cat.gif"), file=get_random_image("cat"))
+        await AtlasMessage(interaction).send_image(title="Cats!", url="attachment://cat.gif", file=get_random_image("cat"))
 
-    @commands.command(name="dog")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _dog(self, ctx):
+    @app_commands.command(name="dog")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _dog(self, interaction: discord.Interaction):
         """Sends an image of a dog."""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title="Dogs!").set_image(url="attachment://dog.gif"), file=get_random_image("dog"))
+        await AtlasMessage(interaction).send_image(title="Dogs!", url="attachment://dog.gif", file=get_random_image("dog"))
 
-    @commands.command(name="hug")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _hug(self, ctx, user: discord.Member):
+    @app_commands.command(name="hug")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _hug(self, interaction: discord.Interaction, user: discord.Member):
         """Hug someone!"""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title=f"{ctx.author.name} hugged {user.name}!").set_image(url="attachment://hug.gif"), file=get_random_image("hug"))
+        await AtlasMessage(interaction).send_image(title=f"{interaction.user.name} hugged {user.name}!", url="attachment://hug.gif", file=get_random_image("hug"))
 
-    @commands.command(name="slap")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _slap(self, ctx, user: discord.Member):
+    @app_commands.command(name="slap")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _slap(self, interaction: discord.Interaction, user: discord.Member):
         """Slap someone!"""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title=f"{ctx.author.name} slapped {user.name}!").set_image(url="attachment://slap.gif"), file=get_random_image("slap"))
+        await AtlasMessage(interaction).send_image(title=f"{interaction.user.name} slapped {user.name}!", url="attachment://slap.gif", file=get_random_image("slap"))
 
-    @commands.command(name="pat")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _pat(self, ctx, user: discord.Member):
+    @app_commands.command(name="pat")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _pat(self, interaction: discord.Interaction, user: discord.Member):
         """Pat someone!"""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title=f"{ctx.author.name} patted {user.name}!").set_image(url="attachment://pat.gif"), file=get_random_image("pat"))
+        await AtlasMessage(interaction).send_image(title=f"{interaction.user.name} patted {user.name}!", url="attachment://pat.gif", file=get_random_image("pat"))
 
-    @commands.command(name="dice", aliases=["roll"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _dice(self, ctx):
+    @app_commands.command(name="bucket")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _bucket(self, interaction: discord.Interaction):
+        """bucket."""
+        await AtlasMessage(interaction).send_image(title="Bucket", description="bucket", url="attachment://bucket.png", file=get_random_image("bucket"))
+
+    @app_commands.command(name="dice")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _dice(self, interaction: discord.Interaction):
         """Roll a dice!"""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title=f"{ctx.author.name} rolled a dice!", description=f"The number is {random.randint(1,6)}"))
+        await AtlasMessage(interaction).send(title=f"{interaction.user.name} rolled a dice!", description=f"You rolled a {random.randint(1,6)}!")
 
-    @commands.command(name="rps")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _rps(self, ctx, type):
+    @app_commands.command(name="rps")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _rps(self, interaction: discord.Interaction, type: str):
         """Play the world famous game Rocks, Papers and Scissors with someone!"""
         playables = ["rock", "paper", "scissors"]
         if type.lower() not in playables:
+            await AtlasMessage(interaction).send_error(title=f"Invalid item {type}!")
             return
 
         response = random.randint(0, 2)
         if type == playables[response+1 if response != 2 else 0]:
-            embed = Embeds.default(user=ctx.author, colour=Colour.INFO,
-                                   title=f"{ctx.author.name} plays {type.lower()}!", description=f"The bot played **{playables[response]}**, You Win!")
+            await AtlasMessage(interaction).send(title=f"{interaction.user.name} plays {type.lower()}!", description=f"The bot played **{playables[response]}**, You Win!")
         elif type == playables[response-1]:
-            embed = Embeds.default(user=ctx.author, colour=Colour.INFO,
-                                   title=f"{ctx.author.name} plays {type.lower()}!", description=f"The bot played **{playables[response]}**, You Lose!")
+            await AtlasMessage(interaction).send(title=f"{interaction.user.name} plays {type.lower()}!", description=f"The bot played **{playables[response]}**, You Lose!")
         else:
-            embed = Embeds.default(user=ctx.author, colour=Colour.INFO,
-                                   title=f"{ctx.author.name} plays {type.lower()}!", description=f"The bot played **{playables[response]}**, its a Tie!")
-        await ctx.send(embed=embed)
+            await AtlasMessage(interaction).send(title=f"{interaction.user.name} plays {type.lower()}!", description=f"The bot played **{playables[response]}**, its a Tie!")
 
-    @commands.command(name="combine", aliases=["merge"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _combine(self, ctx, user_1: discord.Member, user_2: discord.Member):
-        """~~ships~~ combines the usernames of any two users!"""
-        combine1 = math.ceil(len(user_1.display_name)/2)
-        combine2 = math.ceil(len(user_2.display_name)/2)
-        combined = user_1.display_name[:combine1] + user_2.display_name[combine2:]
-        await ctx.send(embed=Embeds.default(user=ctx.author, title=f"{user_1.display_name} + {user_2.display_name} = {combined}"), colour=Colour.INFO)
+    @_rps.autocomplete("type")
+    async def _type_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        playables = ["rock", "paper", "scissors"]
+        return [app_commands.Choice(name=choice, value=choice) for choice in playables if current.lower() in choice.lower()]
 
-    @commands.command(name="bucket", aliases=["lol", "1"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _bucket(self, ctx):
-        """bucket."""
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO, title="Bucket", description="bucket").set_image(url="attachment://bucket.png"), file=get_random_image("bucket"))
+    @app_commands.command(name="combine")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _combine(self, interaction: discord.Interaction, user_1: discord.Member, user_2: discord.Member):
+        """combines the usernames of any two users!"""
+        length1 = math.ceil(len(user_1.display_name)/2)
+        length2 = math.ceil(len(user_2.display_name)/2)
+        combined = user_1.display_name[:length1] + user_2.display_name[length2:]
+        await AtlasMessage(interaction).send(title=f"{user_1.display_name} + {user_2.display_name} = {combined}")
 
-    # @commands.command()
-    # async def russian_roulette(self, ctx):
-    #     if random.randint(1, 6) == 1:
-    #         await ctx.author.kick
-
-    @commands.command(name="avatar", aliases=["pfp"])
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _avatar(self, ctx):
+    @app_commands.command(name="avatar")
+    @app_commands.checks.cooldown(rate=1, per=1)
+    async def _avatar(self, interaction: discord.Interaction, user: discord.Member = None):
         """Fetch the avatar of a user."""
-        try:
-            user = ctx.message.mentions[0]
-        except IndexError:
-            user = ctx.author
-
-        await ctx.send(embed=Embeds.default(user=ctx.author, colour=Colour.INFO).set_image(url=user.avatar))
+        user = user if user else interaction.user
+        await AtlasMessage(interaction).send_image(url=user.avatar)
 
 
 async def setup(bot):

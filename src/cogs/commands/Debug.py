@@ -1,6 +1,8 @@
+import discord
+from discord import app_commands
 from discord.ext import commands
-from scripts.embeds import Embeds
-from utils.functions import stringify
+
+from scripts.message import AtlasMessage
 
 
 class Miscellaneous(commands.Cog):
@@ -9,17 +11,17 @@ class Miscellaneous(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="echo")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _echo(self, ctx, *content):
+    @app_commands.command(name="echo")
+    @app_commands.checks.cooldown(rate=1, per=10)
+    async def _echo(self, interaction: discord.Interaction, content: str):
         """Echos a message."""
-        await ctx.send(embed=Embeds.default(user=ctx.author, description=stringify(content)))
+        await AtlasMessage(interaction).send(description=content)
 
-    @commands.command(name="ping")
-    @commands.cooldown(rate=1, per=1, type=commands.BucketType.guild)
-    async def _ping(self, ctx):
+    @app_commands.command(name="ping")
+    @app_commands.checks.cooldown(rate=1, per=10)
+    async def _ping(self, interaction: discord.Interaction):
         """Pings the bot."""
-        await ctx.send(embed=Embeds.default(user=ctx.author, description=f'**Pong!** *{round(self.bot.latency*1000, 4)} ms*'))
+        await AtlasMessage(interaction).send(description=f'**Pong!** *{round(self.bot.latency*1000, 4)} ms*')
 
 
 async def setup(bot):

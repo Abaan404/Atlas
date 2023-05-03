@@ -1,11 +1,13 @@
+import discord
+import re
+from discord import app_commands
 from discord.ext import commands
 
-from scripts.embeds import Colour, Embeds
+from scripts.message import AtlasMessage
 from scripts.database import ModuleDB
+
 from utils.enums import Module
 from utils.errors import ModuleNotFound
-from utils.functions import snowflake_id, stringify
-from utils.regex import regex_channel, regex_time_24h
 
 
 class Modules(commands.Cog):
@@ -14,118 +16,74 @@ class Modules(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.group()
-    @commands.cooldown(rate=1, per=2, type=commands.BucketType.guild)
-    async def modules(self, ctx):
-        """Parent command for modules."""
-        if ctx.invoked_subcommand is None:
-            pass
+    modules = app_commands.Group(name="modules", description="Enable features for your server!")
+    enable = app_commands.Group(name="enable", description="enable a module", parent=modules)
 
-    @modules.command(name="load", aliases=["enable", "add"])
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def _enable(self, ctx, module: str, *args):
-        """Loads the module from the bot on your server."""
+    @enable.command(name="fun")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def _fun(self, interaction: discord.Interaction):
+        ModuleDB(interaction.guild.id).enable(Module.FUN)
+        await AtlasMessage(interaction).send(title=f"**Enabled Module Fun!**")
 
-        match (module := Module.__dict__.get(module.upper())):  # meh am lazy
-            case Module.FUN:
-                config = {}
-                text = ""
+    @enable.command(name="blame")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def _blame(self, interaction: discord.Interaction):
+        ModuleDB(interaction.guild.id).enable(Module.BLAME)
+        await AtlasMessage(interaction).send(title=f"**Enabled Module Blame!**")
 
-            case Module.BLAME:
-                config = {}
-                text = ""
+    @enable.command(name="radio")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def _radio(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        ModuleDB(interaction.guild.id).enable(Module.RADIO, {"channel": channel.id})
+        await AtlasMessage(interaction).send(title=f"**Enabled Module Radio!**")
 
-            case Module.QOTD:
-                if len(args) != 2:
-                    await ctx.send(embed=Embeds.default(
-                        user=ctx.author,
-                        description="**Invalid Syntax** +modules enable qotd <channel> <time [HH:MM UTC 24h]>",
-                        colour=Colour.ERROR
-                    ))
-                    return
+    @enable.command(name="qotd", description="Ensure time is in the format of HH:MM UTC 24h")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def _qotd(self, interaction: discord.Interaction, channel: discord.TextChannel, time: str):
+        if not re.search("^(2[0-4]|[0-1|]?[0-9]):([0-5]?[0-9])$", time):
+            await AtlasMessage(interaction).send_error(description=f"Invalid Time Format [HH:MM UTC 24h]: {time}")
+            return
 
-                if not regex_channel(args[0]):
-                    await ctx.send(embed=Embeds.default(
-                        user=ctx.author,
-                        description="**Invalid Syntax** Unknown Channel",
-                        colour=Colour.ERROR
-                    ))
-                    return
+        ModuleDB(interaction.guild.id).enable(Module.QOTD, {"channel": channel.id, "time": time})
+        await AtlasMessage(interaction).send(title=f"**Enabled Module QOTD!**")
 
-                if not regex_time_24h(args[1]):
-                    await ctx.send(embed=Embeds.default(
-                        user=ctx.author,
-                        description=f"Invalid Time Format [HH:MM UTC 24h]: {args[1]}",
-                        colour=Colour.ERROR
-                    ))
-                    return
-
-                config = {"channel": snowflake_id(args[0]), "time": args[1]}
-                text = f"Channel: {args[0]}\nTime: {args[1]}"
-
-            case Module.RADIO:
-                if len(args) != 1:
-                    await ctx.send(embed=Embeds.default(
-                        user=ctx.author,
-                        description="**Invalid Syntax** +modules enable radio <channel>",
-                        colour=Colour.ERROR
-                    ))
-                    return
-
-                if not regex_channel(args[0]):
-                    await ctx.send(embed=Embeds.default(
-                        user=ctx.author, description="**Invalid Syntax** Unknown Channel",
-                        colour=Colour.ERROR
-                    ))
-                    return
-
-                config = {"channel": snowflake_id(args[0])}
-                text = f"Channel: {args[0]}"
-            case _:
-                raise ModuleNotFound
-
-        ModuleDB(ctx.guild.id).enable(module, config)
-        await ctx.send(embed=Embeds.default(user=ctx.author, title=f"**Enabled Module {module.value}**\n{text}"))
-
-    @modules.command(name="unload", aliases=["disable", "remove"])
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def _disable(self, ctx, module):
+    @modules.command(name="disable")
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def _disable(self, interaction: discord.Interaction, module: str):
         """Unloads the module from the bot on your server."""
         if not (module := Module.__dict__.get(module.upper())):
             raise ModuleNotFound
 
-        ModuleDB(ctx.guild.id).disable(module)
-        await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            title=f"Disabled Module {module.value}!",
-            colour=Colour.ERROR
-        ))
+        ModuleDB(interaction.guild.id).disable(module)
+        await AtlasMessage(interaction).send(f"Disabled Module {module.value}!")
 
-    @modules.command(name="loaded", aliases=["enabled"])
-    @commands.guild_only()
-    async def _enabled(self, ctx):
-        """List out the loaded modules on your server."""
-        modules = ModuleDB(ctx.guild.id).fetch_enabled_name()
-        if not modules:
-            await ctx.send(embed=Embeds.default(
-                user=ctx.author, description=f"No modules are enabled for **{ctx.guild.name}**.",
-                colour=Colour.ERROR
-            ))
-        else:
-            await ctx.send(embed=Embeds.default(
-                user=ctx.author,
-                description=f"The enabled modules for **{ctx.guild.name}** are listed below:\n\n {stringify([f'`{x}`' for x in modules])}"
-            ))
+    @_disable.autocomplete("module")
+    async def _disable_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        modules = ModuleDB(interaction.guild.id).fetch_enabled_name()
+        return [app_commands.Choice(name=choice, value=choice) for choice in modules if current.lower() in choice.lower()]
 
     @modules.command(name="list")
-    async def _list(self, ctx):
+    @app_commands.guild_only()
+    @app_commands.checks.cooldown(rate=1, per=2)
+    async def _list(self, interaction: discord.Interaction):
         """List out all available modules on the server."""
-        await ctx.send(embed=Embeds.default(
-            user=ctx.author,
-            description="""Available modules, have an idea? Message @Abaan404#9892!\n\n • **Blame** - Blame your friends!\n • **QOTD** - Pings a role at a certain time of the day everyday to ask a question\n • **Fun** - Just a bunch of random commands lol.\n • **Radio** - Play Music!"""
-        ))
+        modules = ModuleDB(interaction.guild.id).fetch_enabled_name()
+        await AtlasMessage(interaction).send_field(
+            title="Modules List",
+            description=f" • **Blame** - Blame your friends!\n • **QOTD** - Pings a role at a certain time of the day everyday to ask a question\n • **Fun** - Just a bunch of random commands lol.\n • **Radio** - Play Music!",
+            name="Enabled Modules",
+            value=" ".join([f'`{module}`' for module in modules]) or "No modules are enabled for this server"
+        )
 
 
 async def setup(bot):
