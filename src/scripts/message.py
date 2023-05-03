@@ -51,11 +51,11 @@ class AtlasPagifier(discord.ui.View):
         if self._current_page > len(self.cache) - 1:
             self.cache.append(tuple(itertools.islice(self.data, self.divider))) # fetch the next set of values
 
-    @discord.ui.button(label="◀️", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(emoji="◀️", style=discord.ButtonStyle.primary)
     async def previous_button_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.change_page(interaction, -1)
 
-    @discord.ui.button(label="▶️", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.primary)
     async def next_button_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.change_page(interaction, +1)
 
@@ -91,17 +91,17 @@ class AtlasPlayerControl(discord.ui.View):
 
         return True
 
-    @discord.ui.button(label="⏯️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(emoji="⏯️", style=discord.ButtonStyle.primary)
     async def pause_callback(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.player.set_pause(not self.player.is_paused)
         await interaction.response.defer()
 
-    @discord.ui.button(label="⏯️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.primary)
     async def skip_callback(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.player.stop()
         await interaction.response.defer()
 
-    @discord.ui.button(label="🔁", style=discord.ButtonStyle.primary)
+    @discord.ui.button(emoji="🔁", style=discord.ButtonStyle.primary)
     async def loop_callback(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         RadioDB(self.player.guild.id).cycle_loop()
         await interaction.response.edit_message(embed=interaction.message.embeds[0].set_footer(text=self.loop_text()))
@@ -159,12 +159,12 @@ class AtlasVolumeControl(discord.ui.View):
 
         return True
 
-    @discord.ui.button(label="➕", style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji="➕", style=discord.ButtonStyle.secondary)
     async def increase_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.player.set_volume(clamp(self.player.volume + 10, 0, 100))
         await interaction.response.edit_message(embed=self.update_embed())
 
-    @discord.ui.button(label="➖", style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji="➖", style=discord.ButtonStyle.secondary)
     async def decrease_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.player.set_volume(clamp(self.player.volume - 10, 0, 100))
         await interaction.response.edit_message(embed=self.update_embed())
@@ -199,7 +199,7 @@ class AtlasVoteSkipControl(discord.ui.View):
             colour=Colour.RADIO
         )
 
-    @discord.ui.button(label="skip", style=discord.ButtonStyle.green)
+    @discord.ui.button(emoji="⏭️", label="Voteskip", style=discord.ButtonStyle.green)
     async def voteskip_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         self.skippers.add(interaction.user.id)
         if len(self.connected) / 2 <= len(self.skippers):
