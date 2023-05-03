@@ -20,6 +20,7 @@ class Blame(commands.Cog):
         return True
 
     @app_commands.command(name="blame")
+    @app_commands.describe(blamed="The user to blame", reason="The reason for the blame")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     async def _blame(self, interaction: discord.Interaction, blamed: discord.Member, reason: str = None):
@@ -33,6 +34,7 @@ class Blame(commands.Cog):
             await AtlasMessage(interaction).send(description=f"{blamed.mention} has been blamed **{blame.count(blamed.id)}** time(s)!")
 
     @app_commands.command(name="blamelist")
+    @app_commands.describe(blamed="The user that's been blamed")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     async def _blamelist(self, interaction: discord.Interaction, blamed: discord.Member = None):
@@ -49,6 +51,7 @@ class Blame(commands.Cog):
         )
 
     @app_commands.command(name="blamecount")
+    @app_commands.describe(blamed="The user that's been blamed")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     async def _blamecount(self, interaction: discord.Interaction, blamed: discord.Member = None):

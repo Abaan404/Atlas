@@ -102,6 +102,7 @@ class Radio(RadioCore):
         await AtlasMessage(interaction).send_error(title="You're not connected to the bot's channel")
 
     @app_commands.command(name="join")
+    @app_commands.describe(channel="The channel to join")
     @app_commands.checks.cooldown(rate=1, per=3)
     @app_commands.guild_only()
     @AtlasPermissions.verify_channel(Module.RADIO)
@@ -142,12 +143,13 @@ class Radio(RadioCore):
         await AtlasMessage(interaction).send(title=f"Radio disconnected", colour=Colour.RADIO)
 
     @app_commands.command(name="play")
+    @app_commands.describe(query="The song name or its URL")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
     @AtlasPermissions.verify_level(Roles.RADIO)
     @AtlasPermissions.verify_channel(Module.RADIO)
     async def _play(self, interaction: discord.Interaction, query: str = None):
-        """Add a song into the playlist."""
+        """Plays a song! Supports: Twitch, Youtube, SoundCloud, Apple Music, and Spotify tracks."""
         if not interaction.user.voice:
             await AtlasMessage(interaction).send_error(title="You're not connected to a voice channel")
             return
@@ -247,6 +249,7 @@ class Radio(RadioCore):
             await self.play_song(player, playlist)
 
     @app_commands.command(name="remove")
+    @app_commands.describe(position="The position to remove the song at")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
     @AtlasPermissions.verify_level(Roles.RADIO)
@@ -267,6 +270,7 @@ class Radio(RadioCore):
         await AtlasMessage(interaction).send(title=f"Removed song {song['title']}", colour=Colour.RADIO)
 
     @app_commands.command(name="jump")
+    @app_commands.describe(position="The position to jump in the playlist")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
     @AtlasPermissions.verify_level(Roles.RADIO)
@@ -286,6 +290,7 @@ class Radio(RadioCore):
         await AtlasMessage(interaction).send(title=f"Now Playing: {song['author']} | {song['title']}", colour=Colour.RADIO)
 
     @app_commands.command(name="move")
+    @app_commands.describe(index1="The index of the song to move from", index2="The index of the song to move to")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
     @AtlasPermissions.verify_level(Roles.RADIO)
@@ -335,6 +340,7 @@ class Radio(RadioCore):
         await AtlasMessage(interaction).send(title="Now Paused!" if player.is_paused else "Now Playing!", colour=Colour.RADIO)
 
     @app_commands.command(name="loop")
+    @app_commands.describe(type="The playlist loop to set")
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.guild_only()
     @AtlasPermissions.verify_level(Roles.RADIO)
@@ -351,7 +357,7 @@ class Radio(RadioCore):
                 RadioDB(interaction.guild.id).set_loop("playlist_repeat")
             case "track":
                 RadioDB(interaction.guild.id).set_loop("track_repeat")
-            case "none" | "stop" | "disable":
+            case "disable":
                 RadioDB(interaction.guild.id).set_loop("no_repeat")
             case _:
                 RadioDB(interaction.guild.id).cycle_loop()
@@ -363,6 +369,12 @@ class Radio(RadioCore):
                 await AtlasMessage(interaction).send(title="Now Looping Track", colour=Colour.RADIO)
             case "no_repeat":
                 await AtlasMessage(interaction).send(title="No Longer Looping", colour=Colour.RADIO)
+
+    @_loop.autocomplete("type")
+    async def _loop_type_autocomplete(self, interaction: discord.Interaction, current: str):
+        selection = ["playlist", "track", "disable"]
+        return [app_commands.Choice(name=choice, value=choice) for choice in selection if current.lower() in choice.lower()]
+
 
     @app_commands.command(name="shuffle")
     @app_commands.checks.cooldown(rate=1, per=2)
@@ -404,12 +416,13 @@ class Radio(RadioCore):
         )
 
     @app_commands.command(name="volume")
+    @app_commands.describe(volume="The volume to set the player at")
     @app_commands.checks.cooldown(rate=1, per=3)
     @app_commands.guild_only()
     @AtlasPermissions.verify_level(Roles.RADIO)
     @AtlasPermissions.verify_channel(Module.RADIO)
     async def _volume(self, interaction: discord.Interaction, volume: int = None):
-        """Sets the volume of the player."""
+        """Change the player volume."""
         player = interaction.guild.voice_client
         if not await self.is_user_connected(interaction, player):
             return
@@ -429,7 +442,7 @@ class Radio(RadioCore):
     @AtlasPermissions.verify_level(Roles.RADIO)
     @AtlasPermissions.verify_channel(Module.RADIO)
     async def _skip(self, interaction: discord.Interaction):
-        """Skip a song."""
+        """Skips the current song."""
         player = interaction.guild.voice_client
         if not await self.is_user_connected(interaction, player):
             return
@@ -445,7 +458,7 @@ class Radio(RadioCore):
     @app_commands.guild_only()
     @AtlasPermissions.verify_channel(Module.RADIO)
     async def _voteskip(self, interaction: discord.Interaction):
-        """Vote to skip a song."""
+        """Vote to skip the current song."""
         player = interaction.guild.voice_client
         if not await self.is_user_connected(interaction, player):
             return

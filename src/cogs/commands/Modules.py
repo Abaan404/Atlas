@@ -23,6 +23,7 @@ class Modules(commands.Cog):
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)
     async def _fun(self, interaction: discord.Interaction):
+        """Enable the fun module."""
         ModuleDB(interaction.guild.id).enable(Module.FUN)
         await AtlasMessage(interaction).send(title=f"**Enabled Module Fun!**")
 
@@ -31,30 +32,36 @@ class Modules(commands.Cog):
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)
     async def _blame(self, interaction: discord.Interaction):
+        """Enable the blame module."""
         ModuleDB(interaction.guild.id).enable(Module.BLAME)
         await AtlasMessage(interaction).send(title=f"**Enabled Module Blame!**")
 
     @enable.command(name="radio")
+    @app_commands.describe(channel="The channel to invoke radio commands")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)
     async def _radio(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Enable the radio module."""
         ModuleDB(interaction.guild.id).enable(Module.RADIO, {"channel": channel.id})
-        await AtlasMessage(interaction).send(title=f"**Enabled Module Radio!**")
+        await AtlasMessage(interaction).send(title=f"**Enabled Module Radio!**", description=f"Channel: {channel.mention}")
 
-    @enable.command(name="qotd", description="Ensure time is in the format of HH:MM UTC 24h")
+    @enable.command(name="qotd")
+    @app_commands.describe(channel="The channel to send QOTD messages", time="Time at which to send QOTD messages [HH:MM UTC 24h]")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)
     async def _qotd(self, interaction: discord.Interaction, channel: discord.TextChannel, time: str):
+        """Enable the qotd module."""
         if not re.search("^(2[0-4]|[0-1|]?[0-9]):([0-5]?[0-9])$", time):
             await AtlasMessage(interaction).send_error(description=f"Invalid Time Format [HH:MM UTC 24h]: {time}")
             return
 
         ModuleDB(interaction.guild.id).enable(Module.QOTD, {"channel": channel.id, "time": time})
-        await AtlasMessage(interaction).send(title=f"**Enabled Module QOTD!**")
+        await AtlasMessage(interaction).send(title=f"**Enabled Module QOTD!**", description=f"**Channel:** {channel.mention}\n**Time:** {time} UTC")
 
     @modules.command(name="disable")
+    @app_commands.describe(module="The module to disable")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)

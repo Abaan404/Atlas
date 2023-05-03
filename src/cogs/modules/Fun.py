@@ -71,6 +71,7 @@ class Fun(commands.Cog):
         await AtlasMessage(interaction).send(title=f"{interaction.user.name} rolled a dice!", description=f"You rolled a {random.randint(1,6)}!")
 
     @app_commands.command(name="rps")
+    @app_commands.describe(type="The item to play")
     @app_commands.checks.cooldown(rate=1, per=1)
     async def _rps(self, interaction: discord.Interaction, type: str):
         """Play the world famous game Rocks, Papers and Scissors with someone!"""
@@ -93,6 +94,7 @@ class Fun(commands.Cog):
         return [app_commands.Choice(name=choice, value=choice) for choice in playables if current.lower() in choice.lower()]
 
     @app_commands.command(name="combine")
+    @app_commands.describe(user_1="The first user", user_2="The second user")
     @app_commands.checks.cooldown(rate=1, per=1)
     async def _combine(self, interaction: discord.Interaction, user_1: discord.Member, user_2: discord.Member):
         """combines the usernames of any two users!"""
@@ -102,6 +104,7 @@ class Fun(commands.Cog):
         await AtlasMessage(interaction).send(title=f"{user_1.display_name} + {user_2.display_name} = {combined}")
 
     @app_commands.command(name="avatar")
+    @app_commands.describe(user="The user to fetch the avatar of")
     @app_commands.checks.cooldown(rate=1, per=1)
     async def _avatar(self, interaction: discord.Interaction, user: discord.Member = None):
         """Fetch the avatar of a user."""

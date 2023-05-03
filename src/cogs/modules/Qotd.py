@@ -24,6 +24,7 @@ class QOTD(commands.Cog):
     qotd = app_commands.Group(name="qotd", description="Question of the Day!")
 
     @qotd.command(name="suggest")
+    @app_commands.describe(question="The question to suggest")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     async def _suggest(self, interaction: discord.Interaction, question: str):
@@ -66,6 +67,7 @@ class QOTD(commands.Cog):
         )
 
     @qotd.command(name="accept")
+    @app_commands.describe(index="The index of the question to accept")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @AtlasPermissions.verify_level(Roles.MANAGER)
@@ -84,6 +86,7 @@ class QOTD(commands.Cog):
         )
 
     @qotd.command(name="decline")
+    @app_commands.describe(index="The index of the question to decline")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @AtlasPermissions.verify_level(Roles.MANAGER)

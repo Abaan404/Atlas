@@ -38,6 +38,7 @@ class Roles(commands.Cog):
         )
 
     @roles.command(name="add")
+    @app_commands.describe(name="The role to add", role="The discord role to assign")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)
@@ -55,6 +56,7 @@ class Roles(commands.Cog):
         return [app_commands.Choice(name=choice, value=choice) for choice in BOT_ROLES if current.lower() in choice.lower()]
 
     @roles.command(name="remove")
+    @app_commands.describe(name="The role to remove")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.checks.has_permissions(administrator=True)

@@ -12,13 +12,14 @@ class Miscellaneous(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="echo")
-    @app_commands.checks.cooldown(rate=1, per=10)
+    @app_commands.describe(content="The message content")
+    @app_commands.checks.cooldown(rate=1, per=2)
     async def _echo(self, interaction: discord.Interaction, content: str):
         """Echos a message."""
         await AtlasMessage(interaction).send(description=content)
 
     @app_commands.command(name="ping")
-    @app_commands.checks.cooldown(rate=1, per=10)
+    @app_commands.checks.cooldown(rate=1, per=2)
     async def _ping(self, interaction: discord.Interaction):
         """Pings the bot."""
         await AtlasMessage(interaction).send(description=f'**Pong!** *{round(self.bot.latency*1000, 4)} ms*')
