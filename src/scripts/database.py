@@ -6,26 +6,10 @@ from utils.enums import Roles
 
 
 class MongoDB:
-    """Base class to establish a connection with the Mongo Database"""
-    __instance = None
-
-    @staticmethod
-    def get_instance():
-        if not MongoDB.__instance:
-            MongoDB.__instance = MongoDB()
-        return MongoDB.__instance
-
-    def __init__(self):
-        self.client = pymongo.MongoClient("mongodb://mongo:27017/")
-
-    def collection(self, collection):
-        return self.client["discordbot"][collection]
-
-
-class MongoHelper:
+    """Base class to establish a connection with the Mongo Database and a few helper functions"""
     def __init__(self, guild: int, collection: str, schema: dict = {}) -> None:
-        self.mongo = MongoDB.get_instance()
-        self.data = self.mongo.collection(collection)
+        self.client = pymongo.MongoClient("mongodb://mongo:27017/")
+        self.data = self.client["discordbot"][collection]
         self.guild = guild
         self._new_guild(schema)
 
@@ -75,7 +59,7 @@ class MongoHelper:
         self.data.update_one({"_id": self.guild}, {"$push": data})
 
 
-class ModuleDB(MongoHelper):  # TODO
+class ModuleDB(MongoDB):  # TODO
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="modules", schema={"modules": []})
 
@@ -111,7 +95,7 @@ class ModuleDB(MongoHelper):  # TODO
         ])
 
 
-class BlameDB(MongoHelper):
+class BlameDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="blame", schema={"modules": []})
 
@@ -135,7 +119,7 @@ class BlameDB(MongoHelper):
         return self._get_array_length(f"n{user}")
 
 
-class QotdDB(MongoHelper):
+class QotdDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="qotd", schema={"pending": [], "accepted": []})
 
@@ -161,7 +145,7 @@ class QotdDB(MongoHelper):
         return self._get_array_length("accepted"), self._get_object("accepted")
 
 
-class RadioDB(MongoHelper):
+class RadioDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="radio", schema={"loop": "playlist_repeat", "playlist": []})
 
@@ -235,7 +219,7 @@ class RadioDB(MongoHelper):
         self._set_object({"playlist": playlist})
 
 
-class RoleDB(MongoHelper):
+class RoleDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="roles")
 
