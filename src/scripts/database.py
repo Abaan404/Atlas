@@ -258,11 +258,7 @@ class RoleDB(MongoHelper):
 
         guild_roles = self.data.find_one({"_id": self.guild}, {"_id": False}).items()
         user_roles = [role.id for role in member.roles]
-        user_levels = [Roles[role[0]].value for role in guild_roles if role[1] in user_roles]
-        if user_levels:
-            return max(user_levels)
-        else:
-            return 0
+        return max((Roles[name.upper()].value for name, role in guild_roles if role in user_roles), default=0)
 
     def list(self) -> dict:
         return self.data.find_one({"_id": self.guild}, {"_id": False})

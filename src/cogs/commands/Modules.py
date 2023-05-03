@@ -5,9 +5,8 @@ from discord.ext import commands
 
 from scripts.message import AtlasMessage
 from scripts.database import ModuleDB
-
+from scripts.permissions import ModuleDisabled
 from utils.enums import Module
-from utils.errors import ModuleNotFound
 
 
 class Modules(commands.Cog):
@@ -62,7 +61,7 @@ class Modules(commands.Cog):
     async def _disable(self, interaction: discord.Interaction, module: str):
         """Unloads the module from the bot on your server."""
         if not (module := Module.__dict__.get(module.upper())):
-            raise ModuleNotFound
+            raise ModuleDisabled
 
         ModuleDB(interaction.guild.id).disable(module)
         await AtlasMessage(interaction).send(f"Disabled Module {module.value}!")
@@ -75,6 +74,7 @@ class Modules(commands.Cog):
     @modules.command(name="list")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
+    @app_commands.checks.has_permissions(administrator=True)
     async def _list(self, interaction: discord.Interaction):
         """List out all available modules on the server."""
         modules = ModuleDB(interaction.guild.id).fetch_enabled_name()

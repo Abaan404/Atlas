@@ -28,14 +28,13 @@ class Roles(commands.Cog):
     async def _list(self, interaction: discord.Interaction):
         """Send a list of available roles"""
         registered_roles = RoleDB(interaction.guild.id).list().items()
-        for index, (type, id) in enumerate(registered_roles):
-            registered_roles[index] = (f"**{type.lower()}**: <@&{id}>")
+        roles = ((f"**{type.lower()}**: <@&{id}>") for (type, id) in registered_roles)
 
         await AtlasMessage(interaction).send_field(
             title="Role List",
             description=f"**Moderation**: Manager, Radio\n**Ping Roles**: QOTD, MCUpdates\n",
             name="Registered Roles",
-            value="\n".join(registered_roles) or "No roles are registered"
+            value="\n".join(roles) or "No roles are registered"
         )
 
     @roles.command(name="add")

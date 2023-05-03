@@ -4,8 +4,8 @@ from discord.ext import commands
 
 from scripts.message import AtlasMessage
 from scripts.database import ModuleDB, BlameDB
+from scripts.permissions import ModuleDisabled
 from utils.enums import Module
-from utils.errors import ModuleNotFound, DMBlocked
 
 
 class Blame(commands.Cog):
@@ -14,11 +14,9 @@ class Blame(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def cog_check(self, ctx):
-        if isinstance(ctx.channel, discord.channel.DMChannel):
-            raise DMBlocked
-        if not ModuleDB(ctx.guild.id).is_enabled(Module.BLAME):
-            raise ModuleNotFound
+    async def interaction_check(self, interaction: discord.Interaction):
+        if not ModuleDB(interaction.guild.id).is_enabled(Module.BLAME):
+            raise ModuleDisabled
         return True
 
     @app_commands.command(name="blame")

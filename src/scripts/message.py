@@ -5,7 +5,7 @@ import itertools
 from discord.interactions import Interaction
 
 from scripts.database import RadioDB, RoleDB
-
+from scripts.permissions import PermissionError
 from utils.enums import Colour
 from utils.functions import clamp
 from typing import Any, Coroutine, Iterator
@@ -86,8 +86,7 @@ class AtlasPlayerControl(discord.ui.View):
             return
 
         if not RoleDB(self.player.guild.id).permission_level(interaction.user) >= 8:
-            await AtlasMessage(interaction).send_error(title="You do not meet the permissions to run this command!")
-            return
+            raise PermissionError
 
         return True
 
@@ -155,8 +154,7 @@ class AtlasVolumeControl(discord.ui.View):
             return False
 
         if not RoleDB(self.player.guild.id).permission_level(interaction.user) >= 8:
-            await AtlasMessage(interaction).send_error(title="You do not meet the permissions to run this command!")
-            return False
+            raise PermissionError
 
         return True
 

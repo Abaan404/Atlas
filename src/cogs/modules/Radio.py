@@ -8,9 +8,9 @@ from discord.ext import commands
 from scripts.database import ModuleDB, RadioDB
 from scripts.message import AtlasMessage, AtlasPlayerControl, Colour
 from scripts.pomice import AtlasNodePool, AtlasPlayer
+from scripts.permissions import ModuleDisabled, AtlasPermissions
 from utils.enums import Module, Roles
-from utils.errors import DMBlocked, ModuleNotFound
-from utils.functions import clamp, has_permissions, verify_channel
+from utils.functions import clamp
 
 
 class RadioCore(commands.Cog):
@@ -73,11 +73,9 @@ class RadioCore(commands.Cog):
 class Radio(RadioCore):
     """Play Music!"""
 
-    def cog_check(self, ctx):
-        if isinstance(ctx.channel, discord.channel.DMChannel):
-            raise DMBlocked
-        if not ModuleDB(ctx.guild.id).is_enabled(Module.RADIO):
-            raise ModuleNotFound
+    async def interaction_check(self, interaction: discord.Interaction):
+        if not ModuleDB(interaction.guild.id).is_enabled(Module.RADIO):
+            raise ModuleDisabled
         return True
 
     @staticmethod
@@ -86,7 +84,6 @@ class Radio(RadioCore):
             return f"{length//60000:02}:{(length//1000)%60:02}"
         else:
             return f"{length//3600000:02}:{(length//60000)%60:02}:{(length//1000)%60:02}"
-
 
     @staticmethod
     async def is_player_ready(interaction, player):
@@ -107,7 +104,7 @@ class Radio(RadioCore):
     @app_commands.command(name="join")
     @app_commands.checks.cooldown(rate=1, per=3)
     @app_commands.guild_only()
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _join(self, interaction: discord.Interaction, channel: discord.VoiceChannel = None):
         """Joins a vc and start playing."""
         if not (channel if channel else interaction.user.voice):
@@ -136,7 +133,7 @@ class Radio(RadioCore):
     @app_commands.command(name="leave")
     @app_commands.checks.cooldown(rate=1, per=3)
     @app_commands.guild_only()
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _leave(self, interaction: discord.Interaction):
         """Disconnects from the voice channel."""
         player = interaction.guild.voice_client
@@ -147,8 +144,8 @@ class Radio(RadioCore):
     @app_commands.command(name="play")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _play(self, interaction: discord.Interaction, query: str = None):
         """Add a song into the playlist."""
         if not interaction.user.voice:
@@ -252,8 +249,8 @@ class Radio(RadioCore):
     @app_commands.command(name="remove")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _remove(self, interaction: discord.Interaction, position: int):
         """Removes a song from the playlist."""
         player = interaction.guild.voice_client
@@ -272,8 +269,8 @@ class Radio(RadioCore):
     @app_commands.command(name="jump")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _jump(self, interaction: discord.Interaction, position: int):
         """Jumps to a song from the playlist."""
         player = interaction.guild.voice_client
@@ -291,8 +288,8 @@ class Radio(RadioCore):
     @app_commands.command(name="move")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _move(self, interaction: discord.Interaction, index1: int, index2: int):
         """Moves tracks in the playlist."""
         player = interaction.guild.voice_client
@@ -310,8 +307,8 @@ class Radio(RadioCore):
     @app_commands.command(name="clear")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _clear(self, interaction: discord.Interaction):
         """Clears the current playlist."""
         player = interaction.guild.voice_client
@@ -324,8 +321,8 @@ class Radio(RadioCore):
     @app_commands.command(name="pause")
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _pause(self, interaction: discord.Interaction):
         """Pauses the player."""
         player = interaction.guild.voice_client
@@ -340,8 +337,8 @@ class Radio(RadioCore):
     @app_commands.command(name="loop")
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _loop(self, interaction: discord.Interaction, type: str = ""):
         """Loop the playlist."""
         player = interaction.guild.voice_client
@@ -370,8 +367,8 @@ class Radio(RadioCore):
     @app_commands.command(name="shuffle")
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _shuffle(self, interaction: discord.Interaction):
         """Shuffles the playlist."""
         player = interaction.guild.voice_client
@@ -386,7 +383,7 @@ class Radio(RadioCore):
     @app_commands.command(name="queue")
     @app_commands.checks.cooldown(rate=1, per=2)
     @app_commands.guild_only()
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _queue(self, interaction: discord.Interaction):
         """Show the current playlist queue."""
         length, playlist = RadioDB(interaction.guild.id).playlist()
@@ -409,8 +406,8 @@ class Radio(RadioCore):
     @app_commands.command(name="volume")
     @app_commands.checks.cooldown(rate=1, per=3)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _volume(self, interaction: discord.Interaction, volume: int = None):
         """Sets the volume of the player."""
         player = interaction.guild.voice_client
@@ -429,8 +426,8 @@ class Radio(RadioCore):
     @app_commands.command(name="skip")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @has_permissions(Roles.RADIO)
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_level(Roles.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _skip(self, interaction: discord.Interaction):
         """Skip a song."""
         player = interaction.guild.voice_client
@@ -446,7 +443,7 @@ class Radio(RadioCore):
     @app_commands.command(name="voteskip")
     @app_commands.checks.cooldown(rate=1, per=1)
     @app_commands.guild_only()
-    @verify_channel(Module.RADIO)
+    @AtlasPermissions.verify_channel(Module.RADIO)
     async def _voteskip(self, interaction: discord.Interaction):
         """Vote to skip a song."""
         player = interaction.guild.voice_client

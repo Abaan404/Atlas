@@ -5,9 +5,9 @@ from discord.ext import commands
 
 from scripts.message import AtlasMessage, Colour
 from scripts.database import ModuleDB, QotdDB, RoleDB
-from utils.errors import DMBlocked, ModuleNotFound
-from utils.functions import has_permissions
+from scripts.permissions import ModuleDisabled, AtlasPermissions
 from utils.enums import Module, Roles
+
 
 class QOTD(commands.Cog):
     """Question of the day!"""
@@ -15,12 +15,11 @@ class QOTD(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def cog_check(self, ctx):
-        if isinstance(ctx.channel, discord.channel.DMChannel):
-            raise DMBlocked
-        if not ModuleDB(ctx.guild.id).is_enabled(Module.QOTD):
-            raise ModuleNotFound
+    async def interaction_check(self, interaction: discord.Interaction):
+        if not ModuleDB(interaction.guild.id).is_enabled(Module.QOTD):
+            raise ModuleDisabled
         return True
+
 
     qotd = app_commands.Group(name="qotd", description="Question of the Day!")
 
@@ -69,7 +68,7 @@ class QOTD(commands.Cog):
     @qotd.command(name="accept")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
-    @has_permissions(Roles.MANAGER)
+    @AtlasPermissions.verify_level(Roles.MANAGER)
     async def _accept(self, interaction: discord.Interaction, index: int):
         """Accept a QOTD question."""
         index = max(abs(index), 1) - 1
@@ -87,7 +86,7 @@ class QOTD(commands.Cog):
     @qotd.command(name="decline")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
-    @has_permissions(Roles.MANAGER)
+    @AtlasPermissions.verify_level(Roles.MANAGER)
     async def _decline(self, interaction: discord.Interaction, index: int):
         """Decline a QOTD question."""
         index = max(abs(index), 1) - 1
@@ -105,7 +104,7 @@ class QOTD(commands.Cog):
     @qotd.command(name="force")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(rate=1, per=2)
-    @has_permissions(Roles.MANAGER)
+    @AtlasPermissions.verify_level(Roles.MANAGER)
     async def _force(self, interaction: discord.Interaction):
         """Force a QOTD if one fails."""
         channel = self.bot.get_channel(ModuleDB(interaction.guild.id).get_config(Module.QOTD, "channel"))
