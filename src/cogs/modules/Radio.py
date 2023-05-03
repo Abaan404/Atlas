@@ -14,7 +14,7 @@ from utils.functions import clamp
 
 
 class RadioCore(commands.Cog):
-    def __init__(self, bot) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.pomice = AtlasNodePool()
         bot.loop.create_task(self.connect_nodes())
@@ -38,7 +38,7 @@ class RadioCore(commands.Cog):
                 continue
         print(f'Pomice is ready!')
 
-    async def play_song(self, player, playlist):
+    async def play_song(self, player: AtlasPlayer, playlist: list):
         if not player:  # idk it stops working if i remove this
             return
         if not playlist:
@@ -79,25 +79,25 @@ class Radio(RadioCore):
         return True
 
     @staticmethod
-    def format_track_time(length):
+    def format_track_time(length: int) -> str:
         if length < 3600000:  # if less than 01:00:00 minutes
             return f"{length//60000:02}:{(length//1000)%60:02}"
         else:
             return f"{length//3600000:02}:{(length//60000)%60:02}:{(length//1000)%60:02}"
 
     @staticmethod
-    async def is_player_ready(interaction, player):
-        if not player:
+    async def is_player_ready(interaction: discord.Interaction) -> bool:
+        if not interaction.guild.voice_client:
             await AtlasMessage(interaction).send_error(title="The radio isn't currently active")
             return False
-        if not player.is_playing:
+        if not interaction.guild.voice_client.is_playing:
             await AtlasMessage(interaction).send_error(title="The radio isn't currently playing anything")
             return False
         return True
 
     @staticmethod
-    async def is_user_connected(interaction, player):
-        if player and interaction.user.voice.channel == player.channel:
+    async def is_user_connected(interaction: discord.Interaction) -> bool:
+        if interaction.guild.voice_client and interaction.user.voice.channel == interaction.guild.voice_client.channel:
             return True
         await AtlasMessage(interaction).send_error(title="You're not connected to the bot's channel")
 
@@ -257,7 +257,7 @@ class Radio(RadioCore):
     async def _remove(self, interaction: discord.Interaction, position: int):
         """Removes a song from the playlist."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
 
         song = RadioDB(interaction.guild.id).remove(abs(position)-1)
@@ -278,9 +278,9 @@ class Radio(RadioCore):
     async def _jump(self, interaction: discord.Interaction, position: int):
         """Jumps to a song from the playlist."""
         player = interaction.guild.voice_client
-        if not await self.is_player_ready(interaction, player):
+        if not await self.is_player_ready(interaction):
             return
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
 
         if position > 1:
@@ -298,7 +298,7 @@ class Radio(RadioCore):
     async def _move(self, interaction: discord.Interaction, index1: int, index2: int):
         """Moves tracks in the playlist."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
 
         if index1 in {0, 1} or index2 in {0, 1}:
@@ -331,9 +331,9 @@ class Radio(RadioCore):
     async def _pause(self, interaction: discord.Interaction):
         """Pauses the player."""
         player = interaction.guild.voice_client
-        if not await self.is_player_ready(interaction, player):
+        if not await self.is_player_ready(interaction):
             return
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
 
         await player.set_pause(not player.is_paused)
@@ -348,7 +348,7 @@ class Radio(RadioCore):
     async def _loop(self, interaction: discord.Interaction, type: str = ""):
         """Loop the playlist."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
 
         # probably a better way to do this whole command
@@ -384,7 +384,7 @@ class Radio(RadioCore):
     async def _shuffle(self, interaction: discord.Interaction):
         """Shuffles the playlist."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
 
         RadioDB(interaction.guild.id).shuffle()
@@ -424,9 +424,9 @@ class Radio(RadioCore):
     async def _volume(self, interaction: discord.Interaction, volume: int = None):
         """Change the player volume."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
-        if not await self.is_player_ready(interaction, player):
+        if not await self.is_player_ready(interaction):
             return
 
         player = interaction.guild.voice_client
@@ -444,9 +444,9 @@ class Radio(RadioCore):
     async def _skip(self, interaction: discord.Interaction):
         """Skips the current song."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
-        if not await self.is_player_ready(interaction, player):
+        if not await self.is_player_ready(interaction):
             return
 
         player = interaction.guild.voice_client
@@ -460,9 +460,9 @@ class Radio(RadioCore):
     async def _voteskip(self, interaction: discord.Interaction):
         """Vote to skip the current song."""
         player = interaction.guild.voice_client
-        if not await self.is_user_connected(interaction, player):
+        if not await self.is_user_connected(interaction):
             return
-        if not await self.is_player_ready(interaction, player):
+        if not await self.is_player_ready(interaction):
             return
 
         await AtlasMessage(interaction).send_radio_voteskip()

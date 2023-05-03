@@ -8,7 +8,7 @@ from scripts.message import AtlasMessage
 class Miscellaneous(commands.Cog):
     """Miscellaneous commands"""
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @app_commands.command(name="echo")
@@ -25,5 +25,5 @@ class Miscellaneous(commands.Cog):
         await AtlasMessage(interaction).send(description=f'**Pong!** *{round(self.bot.latency*1000, 4)} ms*')
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Miscellaneous(bot))

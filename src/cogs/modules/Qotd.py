@@ -12,7 +12,7 @@ from utils.enums import Module, Roles
 class QOTD(commands.Cog):
     """Question of the day!"""
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     async def interaction_check(self, interaction: discord.Interaction):
@@ -126,5 +126,5 @@ class QOTD(commands.Cog):
         )
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(QOTD(bot))

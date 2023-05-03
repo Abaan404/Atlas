@@ -16,7 +16,7 @@ ROLES = {
 class Roles(commands.Cog):
     """Manage bot roles for users"""
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     roles = app_commands.Group(name="roles", description="Manage Roles")
@@ -72,5 +72,5 @@ class Roles(commands.Cog):
         return [app_commands.Choice(name=choice, value=choice) for choice in BOT_ROLES if current.lower() in choice.lower()]
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Roles(bot))

@@ -11,7 +11,7 @@ from utils.enums import Module
 class Blame(commands.Cog):
     """Blame your friends!"""
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     async def interaction_check(self, interaction: discord.Interaction):
@@ -62,5 +62,5 @@ class Blame(commands.Cog):
         await AtlasMessage(interaction).send(description=f'User {blamed.mention} has been blamed **{blame.count(blamed.id)}** time(s)!')
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Blame(bot))

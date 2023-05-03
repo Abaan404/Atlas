@@ -6,15 +6,16 @@ from discord.interactions import Interaction
 
 from scripts.database import RadioDB, RoleDB
 from scripts.permissions import PermissionError
+from scripts.pomice import AtlasPlayer
 from utils.enums import Colour
 from utils.functions import clamp
-from typing import Any, Coroutine, Iterator
+from typing import Iterable
 
 
 class AtlasEmbed:
 
     @staticmethod
-    def default(user, description="", title="", colour=Colour.INFO) -> discord.Embed:
+    def default(user: discord.User, description: str = "", title: str = "", colour: Colour = Colour.INFO) -> discord.Embed:
         embed = discord.Embed(
             title=title,
             description=description,
@@ -30,8 +31,8 @@ class AtlasEmbed:
         return embed
 
 class AtlasPagifier(discord.ui.View):
-    def __init__(self, data, timeout, divider, length) -> None:
-        self.data = data if isinstance(data, Iterator) else iter(data)
+    def __init__(self, data: Iterable, timeout: float, divider: int, length: int) -> None:
+        self.data = data
         self.divider = divider  # number of fields per page
 
         self.cache = []
@@ -41,24 +42,24 @@ class AtlasPagifier(discord.ui.View):
         super().__init__(timeout=timeout)
 
     @property
-    def current_page(self):
+    def current_page(self) -> int:
         return self._current_page
 
     @current_page.setter
-    def current_page(self, value):
+    def current_page(self, value: int) -> None:
         self._current_page = clamp(value, 0, self.last_page - 1)
         if self._current_page > len(self.cache) - 1:
             self.cache.append(tuple(itertools.islice(self.data, self.divider))) # fetch the next set of values
 
     @discord.ui.button(label="◀️", style=discord.ButtonStyle.blurple)
-    async def previous_button_callback(self, interaction: discord.Interaction, button: discord.Button):
+    async def previous_button_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.change_page(interaction, -1)
 
     @discord.ui.button(label="▶️", style=discord.ButtonStyle.blurple)
-    async def next_button_callback(self, interaction: discord.Interaction, button: discord.Button):
+    async def next_button_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.change_page(interaction, +1)
 
-    def update_embed(self, embed, increment=0):
+    def update_embed(self, embed: discord.Embed, increment: int = 0) -> discord.Embed:
         embed.clear_fields()
         self.current_page += increment
         for name, value in self.cache[self.current_page]:
@@ -70,17 +71,17 @@ class AtlasPagifier(discord.ui.View):
         embed.set_footer(text=f"Page: {self.current_page + 1}/{self.last_page}")
         return embed
 
-    async def change_page(self, interaction: discord.Interaction, increment=0):
+    async def change_page(self, interaction: discord.Interaction, increment: int = 0) -> None:
         embed = self.update_embed(interaction.message.embeds[0], increment=increment)
         await interaction.response.edit_message(embed=embed)
 
 class AtlasPlayerControl(discord.ui.View):
-    def __init__(self, player, playlist):
+    def __init__(self, player: AtlasPlayer, playlist: list) -> None:
         self.player = player
         self.playlist = playlist
         super().__init__(timeout=None)
 
-    async def interaction_check(self, interaction: Interaction) -> Coroutine[Any, Any, bool]:
+    async def interaction_check(self, interaction: Interaction) -> bool:
         if not (interaction.user.voice and interaction.user.voice.channel == self.player.channel):
             await AtlasMessage(interaction).send_error(title="You are not connected to the bot's channel!")
             return
@@ -91,21 +92,21 @@ class AtlasPlayerControl(discord.ui.View):
         return True
 
     @discord.ui.button(label="⏯️", style=discord.ButtonStyle.primary)
-    async def pause_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def pause_callback(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.player.set_pause(not self.player.is_paused)
         await interaction.response.defer()
 
     @discord.ui.button(label="⏯️", style=discord.ButtonStyle.primary)
-    async def skip_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def skip_callback(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.player.stop()
         await interaction.response.defer()
 
     @discord.ui.button(label="🔁", style=discord.ButtonStyle.primary)
-    async def loop_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def loop_callback(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         RadioDB(self.player.guild.id).cycle_loop()
         await interaction.response.edit_message(embed=interaction.message.embeds[0].set_footer(text=self.loop_text()))
 
-    async def update_player_controls(self):
+    async def update_player_controls(self) -> None:
         if not self.player:
             return
 
@@ -116,7 +117,7 @@ class AtlasPlayerControl(discord.ui.View):
                 await self.player.message.delete()
             self.player.message = await self.player.text_channel.send(embed=self.update_embed(), view=self)
 
-    def update_embed(self):
+    def update_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title=f"Now Playing: {self.playlist[0]['author']} | {self.playlist[0]['title']}",
             colour=Colour.RADIO.value
@@ -132,7 +133,7 @@ class AtlasPlayerControl(discord.ui.View):
 
         return embed
 
-    def loop_text(self):
+    def loop_text(self) -> str:
         match RadioDB(self.player.guild.id).get_loop():
             case "playlist_repeat":
                 return "🔁 | Playlist"
@@ -143,12 +144,12 @@ class AtlasPlayerControl(discord.ui.View):
 
 
 class AtlasVolumeControl(discord.ui.View):
-    def __init__(self, interaction, timeout=30):
+    def __init__(self, interaction, timeout=30) -> None:
         self.initiator = interaction.user
         self.player = interaction.guild.voice_client
         super().__init__(timeout=timeout)
 
-    async def interaction_check(self, interaction: Interaction) -> Coroutine[Any, Any, bool]:
+    async def interaction_check(self, interaction: Interaction) -> bool:
         if not (interaction.user.voice and interaction.user.voice.channel == self.player.channel):
             await AtlasMessage(interaction).send_error(title="You are not connected to the bot's channel!")
             return False
@@ -159,16 +160,16 @@ class AtlasVolumeControl(discord.ui.View):
         return True
 
     @discord.ui.button(label="➕", style=discord.ButtonStyle.gray)
-    async def increase_callback(self, interaction: discord.Interaction, button: discord.Button):
+    async def increase_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.player.set_volume(clamp(self.player.volume + 10, 0, 100))
         await interaction.response.edit_message(embed=self.update_embed())
 
     @discord.ui.button(label="➖", style=discord.ButtonStyle.gray)
-    async def decrease_callback(self, interaction: discord.Interaction, button: discord.Button):
+    async def decrease_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         await self.player.set_volume(clamp(self.player.volume - 10, 0, 100))
         await interaction.response.edit_message(embed=self.update_embed())
 
-    def update_embed(self):
+    def update_embed(self) -> discord.Embed:
         return AtlasEmbed.default(
             user=self.initiator,
             title=f"Player Volume: {self.player.volume}",
@@ -176,21 +177,21 @@ class AtlasVolumeControl(discord.ui.View):
         )
 
 class AtlasVoteSkipControl(discord.ui.View):
-    def __init__(self, interaction: discord.interactions, timeout=30):
+    def __init__(self, interaction: discord.interactions, timeout=30) -> None:
         self.skippers = set()
         self.connected = [member.id for member in filter(lambda user: not user.bot, interaction.guild.voice_client.channel.members)]
         self.initiator = interaction.user
 
         super().__init__(timeout=timeout)
 
-    async def interaction_check(self, interaction: Interaction) -> Coroutine[Any, Any, bool]:
+    async def interaction_check(self, interaction: Interaction) -> bool:
         if interaction.user.id not in self.connected:
             await AtlasMessage(interaction).send_error(title="You are not connected to the bot's channel!")
             return False
 
         return True
 
-    def update_embed(self):
+    def update_embed(self) -> discord.Embed:
         return AtlasEmbed.default(
             user=self.initiator,
             title="Vote to skip! (50% skip votes needed)",
@@ -199,7 +200,7 @@ class AtlasVoteSkipControl(discord.ui.View):
         )
 
     @discord.ui.button(label="skip", style=discord.ButtonStyle.green)
-    async def voteskip_callback(self, interaction: discord.Interaction, button: discord.Button):
+    async def voteskip_callback(self, interaction: discord.Interaction, button: discord.Button) -> None:
         self.skippers.add(interaction.user.id)
         if len(self.connected) / 2 <= len(self.skippers):
             button.disabled = True
@@ -216,7 +217,7 @@ class AtlasMessage:
     def __init__(self, interaction: discord.Interaction) -> None:
         self.interaction = interaction
 
-    async def send(self, title="", description="", colour=Colour.INFO) -> None:
+    async def send(self, title: str = "", description: str = "", colour: Colour = Colour.INFO) -> None:
         await self.interaction.response.send_message(embed=AtlasEmbed.default(
             user=self.interaction.user,
             title=title,
@@ -224,7 +225,7 @@ class AtlasMessage:
             colour=colour,
         ))
 
-    async def send_error(self, title="", description="", delete_after=5, colour=Colour.ERROR) -> None:
+    async def send_error(self, title: str = "", description: str = "", colour: Colour = Colour.ERROR, delete_after: float = 5) -> None:
         await self.interaction.response.send_message(delete_after=delete_after, ephemeral=True, embed=AtlasEmbed.default(
             user=self.interaction.user,
             title=title,
@@ -232,7 +233,7 @@ class AtlasMessage:
             colour=colour
         ))
 
-    async def send_image(self, url, file=discord.utils.MISSING, title="", description="", colour=Colour.INFO):
+    async def send_image(self, url: str, title: str = "", description: str = "", colour: Colour = Colour.INFO, file=discord.utils.MISSING) -> None:
         await self.interaction.response.send_message(file=file, embed=AtlasEmbed.default(
             user=self.interaction.user,
             title=title,
@@ -240,7 +241,7 @@ class AtlasMessage:
             colour=colour
         ).set_image(url=url))
 
-    async def send_field(self, title="", description="", name="", value="", inline=False, colour=Colour.INFO) -> None:
+    async def send_field(self, title: str = "", description: str = "", colour: Colour = Colour.INFO, name: str = "", value: str = "", inline: bool = False) -> None:
         embed = AtlasEmbed.default(
             user=self.interaction.user,
             title=title,
@@ -250,7 +251,7 @@ class AtlasMessage:
         embed.add_field(name=name, value=value, inline=inline)
         await self.interaction.response.send_message(embed=embed)
 
-    async def send_page(self, data, length, title="", description="", timeout=30, divider=7, colour=Colour.INFO) -> None:
+    async def send_page(self, data: Iterable, length: int, title: str = "", description: str = "", colour: Colour = Colour.INFO, timeout: float = 30, divider: int = 7) -> None:
         view = AtlasPagifier(data=data, divider=divider, timeout=timeout, length=length)
         embed = view.update_embed(embed=AtlasEmbed.default(
             user=self.interaction.user,

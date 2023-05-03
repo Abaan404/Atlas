@@ -9,8 +9,8 @@ from scripts.permissions import ChannelError, ModuleDisabled, PermissionError
 class Error(commands.Cog):
     """Atlas error handling"""
 
-    def __init__(self, bot):
-        self.bot: commands.Bot = bot
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
         self.bot.tree.error(coro=self.__dispatch_to_app_command_handler)
 
     async def __dispatch_to_app_command_handler(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
@@ -37,5 +37,5 @@ class Error(commands.Cog):
             raise error
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Error(bot))

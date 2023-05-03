@@ -1,8 +1,7 @@
 import random
 import pymongo
-from typing import Union
 
-from utils.enums import Roles
+from utils.enums import Roles, Module
 
 
 class MongoDB:
@@ -13,32 +12,30 @@ class MongoDB:
         self.guild = guild
         self._new_guild(schema)
 
-    def _new_guild(self, schema) -> None:
+    def _new_guild(self, schema: dict) -> None:
         schema.update({"_id": self.guild})
         try:
             self.data.insert_one(schema)
         except pymongo.errors.DuplicateKeyError:
             pass
 
-    def _exists(self, object: str):
+    def _exists(self, object: str) -> bool:
         return bool(self.data.find_one({"_id": self.guild, object: {"$exists": True}}))
 
-    def _get_object(self, key, filter: dict = {}) -> list:
-        if data := self.data.find_one({"_id": self.guild}, filter).get(key):
-            return data
-        return list()
+    def _get_object(self, key: str, filter: dict = {}) -> None:
+        return self.data.find_one({"_id": self.guild}, filter).get(key)
 
-    def _set_object(self, document: dict = {}, filter: dict = {}) -> list:
+    def _set_object(self, document: dict = {}, filter: dict = {}):
         filter.update({"_id": self.guild})
-        return self.data.update_one(filter, {"$set": document})
+        self.data.update_one(filter, {"$set": document})
 
-    def _get_array_element_by_index(self, array: str, index) -> dict:
-        return list(self.data.aggregate([
+    def _get_array_element_by_index(self, array: str, index: int):
+        return next(self.data.aggregate([
             {"$match": {"_id": self.guild}},
-            {"$project": {"array": {"$arrayElemAt": [f"${array}", index]}}}
-        ]))[0].get("array")
+            {"$project": {"object": {"$arrayElemAt": [f"${array}", index]}}}
+        ])).get("object")
 
-    def _remove_array_element_by_index(self, array: str, index) -> Union[dict, None]:
+    def _remove_array_element_by_index(self, array: str, index: int):
         index = abs(index)
         if (val := self._get_array_element_by_index(array, index)):
             # https://jira.mongodb.org/browse/SERVER-1014 :D
@@ -50,44 +47,44 @@ class MongoDB:
     def _get_array_length(self, array: str) -> int:
         if not self._exists(array):
             return 0
-        return list(self.data.aggregate([
+        return next(self.data.aggregate([
             {"$match": {"_id": self.guild}},
             {"$project": {"length": {"$size": f"${array}"}}}
-        ]))[0].get("length")
+        ])).get("length")
 
     def _push(self, data: dict) -> None:
         self.data.update_one({"_id": self.guild}, {"$push": data})
 
 
-class ModuleDB(MongoDB):  # TODO
+class ModuleDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="modules", schema={"modules": []})
 
-    def enable(self, module, config={}) -> None:
+    def enable(self, module: Module, config: dict={}) -> None:
         if not self.data.find_one({"_id": self.guild, "modules.name": module.value}):
             self._push({"modules": {"name": module.value, "config": config}})
         else:
             self._set_object({"modules.$.config": config}, {"modules.name": module.value})
 
-    def disable(self, module) -> None:
+    def disable(self, module: Module) -> None:
         self.data.update_one({"_id": self.guild}, {"$pull": {"modules": {"name": module.value}}})
 
-    def is_enabled(self, module) -> bool:
+    def is_enabled(self, module: Module) -> bool:
         if not self.data.find_one({"_id": self.guild, "modules.name": module.value}):
             return False
         return True
 
-    def get_config(self, module, data) -> Union[None, dict]:
-        return list(self.data.aggregate([
+    def get_config(self, module: Module, data: str) -> dict | None:
+        return next(self.data.aggregate([
             {"$unwind": "$modules"},
             {"$match": {"_id": self.guild, "modules.name": module.value}},
             {"$project": {"_id": False, "config": "$modules.config"}}
-        ]))[0]["config"].get(data)
+        ])).get("config").get(data)
 
     def fetch_enabled_name(self) -> list:
         return [module["name"] for module in self._get_object("modules")]
 
-    def get_guilds_enabled(self, module) -> list:
+    def get_guilds_enabled(self, module: Module) -> list:
         return self.data.aggregate([
             {"$unwind": "$modules"},
             {"$match": {"modules.name": module.value}},
@@ -97,25 +94,25 @@ class ModuleDB(MongoDB):  # TODO
 
 class BlameDB(MongoDB):
     def __init__(self, guild: int) -> None:
-        super().__init__(guild, collection="blame", schema={"modules": []})
+        super().__init__(guild, collection="blame")
 
-    def push(self, user, blamer, reason) -> None:
+    def push(self, user: int, blamer: int, reason: str) -> None:
         self._push({f"n{user}": {"blamer": blamer, "reason": reason}})
 
-    def list(self, user) -> tuple[int, list]:
+    def list(self, user: int) -> tuple[int, list]:
         if not self.data.find_one({"_id": self.guild}):
             return 
-        blames = list(self.data.aggregate([
+        blames = next(self.data.aggregate([
             {"$match": {"_id": self.guild}},
             {"$project": {"blames": {"$filter": {"input": f"$n{user}", "as": "buffer", "cond": {"$ne": ["$$buffer.reason", None]}}}}}
-        ]))[0].get("blames")
-        length = list(self.data.aggregate([
+        ])).get("blames")
+        length = next(self.data.aggregate([
             {"$match": {"_id": self.guild}},
             {"$project": {"length": {"$size": {"$filter": {"input": f"$n{user}", "as": "buffer", "cond": {"$ne": ["$$buffer.reason", None]}}}}}}
-        ]))[0].get("length")
+        ])).get("length")
         return length, blames
 
-    def count(self, user) -> int:
+    def count(self, user: int) -> int:
         return self._get_array_length(f"n{user}")
 
 
@@ -123,18 +120,18 @@ class QotdDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="qotd", schema={"pending": [], "accepted": []})
 
-    def suggest(self, question, user) -> None:
+    def suggest(self, question: str, user: int) -> None:
         self._push({"pending": {"$each": [{"question": f"{question}", "user": user}]}})
 
-    def decline(self, index) -> Union[None, str]:
+    def decline(self, index: int) -> str | None:
         return self._remove_array_element_by_index("pending", index)
 
-    def accept(self, index) -> Union[None, str]:
+    def accept(self, index: int) -> str | None:
         if question := self._remove_array_element_by_index("pending", index):
             self._push({"accepted": question})
         return question
 
-    def fetch(self) -> Union[None, str]:
+    def fetch(self) -> str | None:
         if question := self._remove_array_element_by_index("accepted", 0):
             return question
 
@@ -154,26 +151,26 @@ class RadioDB(MongoDB):
             return self._get_object("playlist", filter={"playlist": {"$slice": limit}})
         return self._get_array_length("playlist"), self._get_object("playlist")
 
-    def playlist_length(self):
-        return list(self.data.aggregate([
+    def playlist_length(self) -> int:
+        return next(self.data.aggregate([
             {"$match": {"_id": self.guild}},
             {"$project": {"length": {"$sum": "$playlist.length"}}}
-        ]))[0].get("length")
+        ])).get("length")
 
-    def push(self, tracks: list[dict]) -> dict:
+    def push(self, tracks: list[dict]) -> int:
         self._push({"playlist": {"$each": tracks}})
         return self.position()
 
-    def position(self):
-        return list(self.data.aggregate([
+    def position(self) -> int:
+        return next(self.data.aggregate([
             {"$match": {"_id": self.guild}},
             {"$project": {"position": {"$size": "$playlist"}}}
-        ]))[0]["position"]
+        ])).get("position")
 
-    def remove(self, index: int) -> Union[None, dict]:
+    def remove(self, index: int) -> dict | None:
         return self._remove_array_element_by_index("playlist", index)
 
-    def update(self) -> Union[None, dict]:
+    def update(self) -> None:
         if not (track := self._get_array_element_by_index("playlist", 0)):
             return
 
@@ -189,12 +186,12 @@ class RadioDB(MongoDB):
     def clear(self) -> None:
         self._set_object({"playlist": []})
 
-    def jump(self, index) -> None: #TODO
+    def jump(self, index: int) -> None:
         self.data.update_one({"_id": self.guild}, [
             {"$set": {"playlist": {"$concatArrays": [{"$slice": ["$playlist", index, {"$size": "$playlist"}]}, {"$slice": ["$playlist", index]}]}}}
         ])
 
-    def swap(self, first, second) -> None:
+    def swap(self, first: int, second: int) -> None:
         track1 = self._get_array_element_by_index("playlist", first)
         track2 = self._get_array_element_by_index("playlist", second)
         self._set_object({f"playlist.{first}": track2})
@@ -207,8 +204,7 @@ class RadioDB(MongoDB):
         self._set_object({"loop": loop_type})
 
     def cycle_loop(self) -> bool:
-        loops = ["playlist_repeat", "track_repeat",
-                 "no_repeat", "playlist_repeat"]
+        loops = ["playlist_repeat", "track_repeat", "no_repeat", "playlist_repeat"]
         loop = loops[loops.index(self.get_loop()) + 1]
         self._set_object({"loop": loop})
         return loop
@@ -223,20 +219,20 @@ class RoleDB(MongoDB):
     def __init__(self, guild: int) -> None:
         super().__init__(guild, collection="roles")
 
-    def insert(self, id, role) -> None:
+    def insert(self, id: int, role: str) -> None:
         self._set_object({role: id})
 
-    def remove(self, role) -> int:
+    def remove(self, role: str) -> int:
         id = self.get(role)
         self.data.update_one({"_id": self.guild}, {"$unset": {role: True}})
         return id
 
-    def get(self, role) -> int:
+    def get(self, role: str) -> int:
         if not (role := self._get_object(role)):
             role = 0
         return role
 
-    def permission_level(self, member) -> int: #TODO test
+    def permission_level(self, member) -> int:
         if member.guild_permissions.administrator:
             return Roles.ADMINISTRATOR.value
 

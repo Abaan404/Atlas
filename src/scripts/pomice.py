@@ -8,7 +8,7 @@ class AtlasPlayer(pomice.Player):
     text_channel = None
     message = None
 
-    async def destroy(self):
+    async def destroy(self) -> None:
         self.text_channel = None
         self.message = None
         return await super().destroy()

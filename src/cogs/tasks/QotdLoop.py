@@ -7,7 +7,7 @@ from utils.enums import Module
 
 class QOTDLoop(commands.Cog):
     """Internal QOTD loop."""
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.qotd.start()
 
@@ -23,7 +23,7 @@ class QOTDLoop(commands.Cog):
         await self.bot.wait_until_ready()
         await asyncio.sleep(75 - datetime.datetime.now().second) # Start the loop at XX:XX:15
 
-    async def execute(self, data):
+    async def execute(self, data: dict):
         if (channel := self.bot.get_channel(data["config"]["channel"])) is None:
             return
         if (question := QotdDB(data["guild"]).fetch()) is None:
@@ -34,5 +34,5 @@ class QOTDLoop(commands.Cog):
                                          .add_field(name = f"Q) {question['question']}", value = f"by <@{question['user']}>")
                                          .set_footer(text = f"{datetime.datetime.utcnow().strftime('%d/%m/%Y | %H:%M')}"))
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(QOTDLoop(bot))

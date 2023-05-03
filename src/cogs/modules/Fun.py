@@ -20,7 +20,7 @@ def get_random_image(category):
 class Fun(commands.Cog):
     """Random commands i thought and went ok"""
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     async def interaction_check(self, interaction: discord.Interaction):
@@ -112,5 +112,5 @@ class Fun(commands.Cog):
         await AtlasMessage(interaction).send_image(url=user.avatar)
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Fun(bot))
