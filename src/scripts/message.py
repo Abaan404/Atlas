@@ -225,7 +225,7 @@ class AtlasMessage:
         ))
 
     async def send_error(self, title="", description="", delete_after=5, colour=Colour.ERROR) -> None:
-        await self.interaction.response.send_message(delete_after=delete_after, embed=AtlasEmbed.default(
+        await self.interaction.response.send_message(delete_after=delete_after, ephemeral=True, embed=AtlasEmbed.default(
             user=self.interaction.user,
             title=title,
             description=description,
